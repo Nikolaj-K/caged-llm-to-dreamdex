@@ -1,0 +1,6 @@
+{
+  "base_url": "https://REPLACE_AFTER_DEPLOYMENT",
+  "protocol": 1,
+  "key_id": "REPLACE_AFTER_DEPLOYMENT",
+  "public_key_b64": "REPLACE_AFTER_DEPLOYMENT"
+}
