@@ -44,4 +44,7 @@ python caged_llm_to_dreamdex.py result INTENT_ID
 
 Run `--help` on the script or a subcommand for exact address/key-file options.
 Opening a generated `/run#p=...` link executes the described action. The client
-must never open that link itself. Status and result URLs contain no secret.
+must never open, preview, or invoke that link itself. The relay's scanner,
+idempotency, and recovery controls reduce implementation mistakes but do not
+make disclosed-key custody safe or trustless. Status and result URLs contain no
+secret.

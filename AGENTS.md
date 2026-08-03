@@ -13,6 +13,8 @@ Before asking for keys, tell the user all of the following:
 - Every execution link contains one private key encrypted to the relay; the
   relay holds the decryption key and can recover it.
 - The relay is trusted infrastructure, not a trustless system.
+- Opening an armed link automatically attempts exactly its one-time action; the
+  browser page has no confirmation button.
 
 Then follow this procedure exactly:
 
@@ -40,7 +42,8 @@ Then follow this procedure exactly:
    revocation are supported. Refuse generic transfers, arbitrary recipients or
    calls, other markets, limit/GTC/post-only orders, and strategies.
 9. After the user opens a link, query both `result` and fresh `status`. Never
-   claim success from page text or receipt status alone.
+   claim success from page text or receipt status alone. Poll `IN PROGRESS`;
+   when a result is `AMBIGUOUS`, do not create another trade or withdrawal.
 10. Delete both temporary key files after withdrawal/cleanup or when the user
     stops. Do not claim that deletion makes disclosed keys safe.
 
