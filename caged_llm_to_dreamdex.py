@@ -14,6 +14,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,11 @@ INTENT_RE = re.compile(r"^[0-9a-f]{32}$")
 ADDRESS_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
 PRIVATE_KEY_RE = re.compile(r"^0x[0-9a-f]{64}$")
 KEY_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+B64URL_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+DNS_HOST_RE = re.compile(
+    r"^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*"
+    r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
+)
 MAX_DECIMAL_PLACES = 18
 
 
@@ -43,10 +49,18 @@ def b64url_encode(data: bytes) -> str:
 
 
 def b64_decode(value: str) -> bytes:
+    if not isinstance(value, str) or not B64URL_RE.fullmatch(value):
+        raise ClientError("relay public key is not canonical base64url")
     try:
-        return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
-    except Exception as exc:
-        raise ClientError("relay public key is not valid base64") from exc
+        encoded = value.encode("ascii")
+        raw = base64.b64decode(
+            encoded + b"=" * (-len(encoded) % 4), altchars=b"-_", validate=True,
+        )
+    except (UnicodeEncodeError, ValueError) as exc:
+        raise ClientError("relay public key is not canonical base64url") from exc
+    if b64url_encode(raw) != value:
+        raise ClientError("relay public key is not canonical base64url")
+    return raw
 
 
 def canonical_json(value: dict[str, Any]) -> bytes:
@@ -123,7 +137,11 @@ def generate_wallets(output_dir: str | None = None) -> tuple[str, str, Path, Pat
         directory.rmdir()
         raise ClientError("session wallet directory cannot be inside a repository or project archive")
     directory.chmod(0o700)
-    owner_key, operator_key = generate_private_key(), generate_private_key()
+    owner_key = generate_private_key()
+    operator_key = generate_private_key()
+    if derive_address(owner_key) == derive_address(operator_key):
+        directory.rmdir()
+        raise ClientError("generated owner and operator wallets unexpectedly collided")
     paths = (directory / "owner.key", directory / "operator.key")
     try:
         for path, key in zip(paths, (owner_key, operator_key), strict=True):
@@ -145,6 +163,43 @@ def checked_address(value: str) -> str:
     if not ADDRESS_RE.fullmatch(value):
         raise ClientError("address must be 0x plus 40 hex characters")
     return to_checksum_address(value)
+
+
+def checked_pair(owner: str, operator: str) -> tuple[str, str]:
+    normalized_owner = checked_address(owner)
+    normalized_operator = checked_address(operator)
+    if normalized_owner == normalized_operator:
+        raise ClientError("owner and operator must be distinct addresses")
+    return normalized_owner, normalized_operator
+
+
+def validate_relay_origin(value: Any, *, allow_insecure_local: bool = False) -> str:
+    if not isinstance(value, str):
+        raise ClientError("relay base URL must be one exact origin")
+    try:
+        value.encode("ascii")
+        parsed = urlsplit(value)
+        port = parsed.port
+    except (UnicodeEncodeError, ValueError) as exc:
+        raise ClientError("relay base URL must be one exact origin") from exc
+    host = parsed.hostname or ""
+    common = bool(
+        parsed.netloc and host and DNS_HOST_RE.fullmatch(host)
+        and parsed.username is None and parsed.password is None
+        and parsed.path == "" and not parsed.query and not parsed.fragment
+    )
+    secure = common and parsed.scheme == "https" and port in {None, 443}
+    local = bool(
+        common and allow_insecure_local and parsed.scheme == "http"
+        and host.lower() in {"127.0.0.1", "localhost"} and port is not None
+    )
+    if not (secure or local):
+        raise ClientError(
+            "relay base URL must be https://HOST with no path, query, fragment, "
+            "credentials, or non-default port; insecure localhost requires "
+            "--allow-insecure-local-relay"
+        )
+    return value
 
 
 def role_address(address: str | None, key_file: str | None, role: str) -> tuple[str, str | None]:
@@ -177,7 +232,11 @@ def load_config(args: argparse.Namespace) -> dict[str, Any]:
         raise ClientError("relay and client protocol do not match")
     if "base_url" not in config:
         raise ClientError("relay base URL is not configured")
-    config["base_url"] = str(config["base_url"]).rstrip("/")
+    allow_local = bool(getattr(args, "allow_insecure_local_relay", False))
+    config["base_url"] = validate_relay_origin(
+        config["base_url"], allow_insecure_local=allow_local,
+    )
+    config["allow_insecure_local_relay"] = allow_local
     return config
 
 
@@ -194,6 +253,7 @@ def make_action(
 ) -> dict[str, Any]:
     if operation not in LIFETIMES:
         raise ClientError("unsupported operation")
+    owner, operator = checked_pair(owner, operator)
     expected_role = "operator" if operation == "trade" else "owner"
     if operation == "transfer":
         expected_role = signer_role
@@ -226,6 +286,9 @@ def make_action(
         recipient = checked_address(parameters["recipient"])
         if int(recipient, 16) == 0:
             raise ClientError("transfer recipient cannot be the zero address")
+        source = owner if signer_role == "owner" else operator
+        if recipient == source:
+            raise ClientError("transfer recipient cannot equal the selected source wallet")
         parameters["recipient"] = recipient
         if mode == "exact":
             parameters["amount"] = canonical_decimal(parameters["amount"], positive=True)
@@ -255,9 +318,13 @@ def execution_url(action: dict[str, Any], config: dict[str, Any]) -> str:
     raw_key = b64_decode(str(config.get("public_key_b64", "")))
     if len(raw_key) != PublicKey.SIZE:
         raise ClientError("relay public encryption key must be 32 bytes")
+    base_url = validate_relay_origin(
+        config.get("base_url"),
+        allow_insecure_local=bool(config.get("allow_insecure_local_relay", False)),
+    )
     ciphertext = SealedBox(PublicKey(raw_key)).encrypt(canonical_json(action))
     package = f"v1.{key_id}.{b64url_encode(ciphertext)}"
-    return f"{config['base_url']}/run#p={package}"
+    return f"{base_url}/run#p={package}"
 
 
 def fetch_text(url: str) -> tuple[bool, str]:
@@ -290,6 +357,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--relay-base-url")
     parser.add_argument("--key-id")
     parser.add_argument("--public-key-b64")
+    parser.add_argument(
+        "--allow-insecure-local-relay", action="store_true",
+        help="allow only http://127.0.0.1:PORT or http://localhost:PORT for local development",
+    )
     commands = parser.add_subparsers(dest="command", required=True)
     wallets = commands.add_parser("generate-wallets")
     wallets.add_argument("--output-dir")
@@ -343,6 +414,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     owner, owner_key = role_address(getattr(args, "owner_address", None), args.owner_key_file, "owner")
     operator, operator_key = role_address(getattr(args, "operator_address", None), args.operator_key_file, "operator")
+    owner, operator = checked_pair(owner, operator)
     if args.command == "status":
         url = f"{config['base_url']}/v1/status/{owner}/{operator}.txt"
         print(f"OWNER={owner}\nOPERATOR={operator}\nSTATUS_URL={url}")
@@ -366,8 +438,11 @@ def main(argv: list[str] | None = None) -> int:
         if not args.all:
             parameters["amount"] = args.amount
         action = make_action("transfer", owner, operator, args.from_role, signer_key or "", parameters)
-        amount_text = "all available" if args.all else args.amount
-        print_link(action, config, f"Transfer {amount_text} {args.asset} from the {args.from_role} wallet to {parameters['recipient']}")
+        transfer_text = (
+            f"all available {args.asset} at signing, after reserving native gas where applicable"
+            if args.all else f"{args.amount} {args.asset}"
+        )
+        print_link(action, config, f"Transfer {transfer_text} from the {args.from_role} wallet to {parameters['recipient']}")
     else:
         asset, amount = ("SOMI", args.somi) if args.side == "sell" else ("USDso", args.usdso)
         parameters = {"side": args.side, "input_asset": asset, "input_amount": amount, "max_slippage_bps": args.max_slippage_bps}

@@ -18,13 +18,17 @@ described immediately before the link. There is no confirmation button. The
 operating LLM must never open, prefetch, preview, or invoke the link for the
 user. The deterministic operating procedure is in `AGENTS.md`.
 
-Each action encrypts only its selected signer key. The relay backend holds the
-matching decryption key; plaintext briefly exists in backend process memory
-while signing and is not intentionally persisted. Generated keys live in `0600`
-temporary files the LLM/tool environment can read; they are not printed by
-default and may disappear with that workspace. Treat all wallets as disposable.
+Each action encrypts only its selected signer key. The relay backend can decrypt
+it. Plaintext briefly exists in backend process memory while the relay validates
+and prepares the action and, when writes are enabled, signs the transaction. It
+is not intentionally written to files, databases, logs, HTML, or API results.
+Generated keys live in `0600` temporary files the LLM/tool environment can read;
+they are not printed by default and may disappear with that workspace. Treat all
+wallets as disposable; process memory cannot be promised to be securely erased.
 
 Transfers are limited to owner SOMI/USDso or operator SOMI, sent to one explicit
-EVM address by exact or maximum amount. The client supports no limit orders,
+EVM address by exact or maximum amount. `max` means all available at signing,
+after reserving native gas where applicable; exact mode remains the exact amount.
+The client supports no limit orders,
 arbitrary contracts/calldata, other markets, strategies, seed phrases, custody,
 or autonomous trading. See `AGENTS.md` and `--help` for the operating flow.
