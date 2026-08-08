@@ -439,8 +439,8 @@ def main(argv: list[str] | None = None) -> int:
             action,
             config,
             f"Reach the 95 SOMI vault and operator-permission targets; {top_up}. "
-            "For a wholly fresh setup, start the owner above 99 SOMI; this is onboarding guidance, "
-            "not a continuing balance floor",
+            "For a wholly fresh setup, about 99 owner SOMI is useful guidance, not a cutoff; "
+            "actual planned value and gas determine feasibility",
         )
     elif args.command == "withdraw-link":
         action = make_action("withdraw", owner, operator, "owner", owner_key or "", {})
