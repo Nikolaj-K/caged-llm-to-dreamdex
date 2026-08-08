@@ -121,9 +121,15 @@ def _inside(path: Path, root: Path) -> bool:
 
 
 def generate_wallets(output_dir: str | None = None) -> tuple[str, str, Path, Path]:
-    workspace = Path(__file__).resolve().parent.parent
-    forbidden = (workspace / "caged-llm-to-dreamdex", workspace / "caged-llm-dreamdex-relay",
-                 workspace / "handoff", workspace / "tmp")
+    client_root = Path(__file__).resolve().parent
+    workspace = client_root.parent
+    forbidden = [client_root]
+    if workspace != Path(workspace.anchor):
+        forbidden.extend((
+            workspace / "caged-llm-dreamdex-relay",
+            workspace / "handoff",
+            workspace / "tmp",
+        ))
     if output_dir:
         directory = Path(output_dir).expanduser().resolve()
         if any(_inside(directory, root.resolve()) for root in forbidden):
@@ -370,7 +376,11 @@ def build_parser() -> argparse.ArgumentParser:
     fund = commands.add_parser("fund-link")
     add_identity(fund, "owner", require_key=True)
     add_identity(fund, "operator")
-    fund.add_argument("--operator-gas-policy", choices=("manual", "top_up_to_target"), required=True)
+    fund.add_argument(
+        "--operator-gas-policy",
+        choices=("manual", "top_up_to_target"),
+        default="top_up_to_target",
+    )
     trade = commands.add_parser("trade-link")
     add_identity(trade, "owner")
     add_identity(trade, "operator", require_key=True)

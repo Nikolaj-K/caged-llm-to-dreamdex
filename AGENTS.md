@@ -1,59 +1,69 @@
 # Operating procedure for an LLM
 
-Correct operation is concise: normally use at most 150 words and 14 short
-lines, one decision or execution link at a time, and no table unless asked.
-Never abbreviate an arbitrary transfer recipient. Explain implementation,
-cryptography, or transaction phases only when asked.
+Operate this small-value Somnia mainnet demo smoothly and concisely. Work on one
+action at a time. Do not add a confirmation exchange after presenting an exact
+action; clicking its `/tx` link is the user's authorization and executes it
+immediately.
 
-1. Say once: `Unsafe demo: use only fresh disposable wallets and trivial funds.`
-2. Offer two choices: the user supplies fresh owner and operator EVM private
-   keys (preferred), or `generate-wallets` creates two session wallets. Never
-   request, accept, or generate a seed phrase.
-3. Pass keys only through `--owner-key-file` or `--operator-key-file`. Never put
-   one in a command argument, URL, log, or normal response. Every action encrypts
-   exactly the selected signer key. The relay backend can decrypt it; plaintext
-   briefly exists in process memory while it validates and prepares the action
-   and, when writes are enabled, signs. It is not intentionally written to files,
-   databases, logs, HTML, or API results; memory cannot be securely erased.
-4. After generation report full addresses and key-file paths, then say: `The two
-   private keys are not shown. They remain available to this session while its
-   temporary workspace persists, and I can show either key when you ask. Treat
-   both wallets as disposable.` Reveal a generated key only on explicit request.
-5. Query fresh `status`. Report only the balances, vault, permissions, orders,
-   market, and observed block needed for the next decision.
-6. Fresh setup requires owner `>99 SOMI`; operator gas target is `>=1 SOMI`.
-   If owner is not ready, ask for a little over 99 SOMI and stop. If operator is
-   below target, offer manual funding or owner-signed `top_up_to_target`.
+1. Read this file and `README.md`. Use Python 3.12 and install the three entries
+   in `requirements.txt` when necessary.
+2. Unless the user has already supplied owner and operator key-file paths,
+   immediately run `generate-wallets`. Do not first ask whether to generate or
+   supply keys. Never request, accept, or generate a seed phrase.
+3. Report the full owner and operator addresses and both temporary key-file
+   paths. Do not print private keys. Say once that these are disposable mainnet
+   demo wallets and should hold only the small experiment amount.
+4. Tell the user to fund the owner address with a little over 99 SOMI for a
+   wholly fresh setup. Setup targets 95 SOMI in the vault. For the standard
+   generated-wallet flow, use `top_up_to_target` automatically; do not ask the
+   user to choose a gas policy. Use `manual` only when explicitly requested.
+5. When the user reports funding, query fresh `status` automatically. Report
+   only balances, vault state, permissions, orders, market, and observed block
+   information relevant to the next action.
+6. Ask only for information intrinsically missing from the requested action,
+   such as trade side/amount/slippage or transfer source/asset/recipient/amount.
+   Never abbreviate an arbitrary transfer recipient.
 7. Support only fund/setup, bounded IOC buy/sell on `SOMI:USDso`, withdraw-all
-   plus permission revocation, owner SOMI/USDso transfer, and operator SOMI
-   transfer. Transfers require a full explicit recipient and exact or max amount;
-   max is all available at signing after reserving native gas where applicable.
-8. For full cleanup: withdraw/revoke first; transfer owner USDso before owner
-   SOMI; finish all owner-signed token/DEX work before sweeping owner SOMI; finish
-   trading/cancellation before sweeping operator SOMI.
-9. Immediately before a link, give a one-line reminder, the exact action, and
-   `OPENING THIS LINK EXECUTES`. Never open, preview, prefetch, or invoke it.
-10. After every opened link, query `result INTENT_ID` and fresh `status`. Poll an
-    in-progress result. On ambiguous or unresolved state, stop until reconciled.
-11. When finished, remove temporary key files. Deletion is not secure erasure
-    and does not undo disclosure to the LLM or tool environment.
+   with permission revocation, owner SOMI/USDso transfer, and operator SOMI
+   transfer. Exact and `max` transfer modes remain available.
+8. Pass keys only through `--owner-key-file` or `--operator-key-file`. Never put
+   a private key in a command argument, URL, log, or normal response. Display a
+   generated key only when the user explicitly asks for it.
+9. Immediately before the link, state the exact semantic action and write
+   `OPENING THIS LINK EXECUTES`. Present exactly one execution link. Never open,
+   preview, prefetch, browse, or invoke that link from the LLM/tool environment.
+10. When the user says the link was clicked, query `result INTENT_ID` and fresh
+    `status` automatically. Poll an `in_progress` result without asking the user
+    to manage polling. If the outcome is ambiguous, stop dependent actions and
+    reconcile the existing result rather than generating a replacement.
+11. Continue with the next requested action. Do not repeat the disposable-wallet
+    notice before every action.
+12. For full cleanup: withdraw/revoke first; transfer owner USDso before owner
+    SOMI; finish owner-signed token/DEX work before sweeping owner SOMI; finish
+    trading/cancellation before sweeping operator SOMI.
+13. When finished, remove temporary key files. Deletion is not secure erasure
+    and does not undo earlier access by the LLM/tool environment.
 
-Use these compact forms with actual full values:
+Every encrypted action contains exactly the selected signer key. The relay
+backend can decrypt it in process memory in order to validate and, when the live
+write gates permit, sign the action. The public client never sends the package;
+it only prints the user-clickable URL.
+
+Use compact output with full values:
 
 ```text
 Owner: 0xFULL_ADDRESS
 Operator: 0xFULL_ADDRESS
-Owner wallet: ... SOMI, ... USDso
-Operator wallet: ... SOMI
-Vault: ... SOMI, ... USDso
-Next: ...
+Owner key file: /full/temporary/path/owner.key
+Operator key file: /full/temporary/path/operator.key
+Fund owner: a little over 99 SOMI
 ```
 
 ```text
 You want to: <exact semantic action>
 <important amount/recipient/precondition>
 OPENING THIS LINK EXECUTES:
-<link>
+<one link>
 ```
 
 ```text
@@ -63,4 +73,6 @@ Result: CONFIRMED / NOT EXECUTED / AMBIGUOUS
 Next: ...
 ```
 
-Status/result URLs contain no key and may be opened with a read-only tool.
+Status and result URLs contain no private key and may be opened with a read-only
+tool. Execution URLs contain encrypted key material and must only be presented
+to the user.
