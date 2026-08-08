@@ -425,7 +425,13 @@ def main(argv: list[str] | None = None) -> int:
         parameters = {"operator_gas_policy": args.operator_gas_policy}
         action = make_action("fund", owner, operator, "owner", owner_key or "", parameters)
         top_up = "top up operator to 1 SOMI if needed" if args.operator_gas_policy == "top_up_to_target" else "require manual operator gas funding"
-        print_link(action, config, f"Reach the 95 SOMI vault and operator-permission targets; {top_up}")
+        print_link(
+            action,
+            config,
+            f"Reach the 95 SOMI vault and operator-permission targets; {top_up}. "
+            "For a wholly fresh setup, start the owner above 99 SOMI; this is onboarding guidance, "
+            "not a continuing balance floor",
+        )
     elif args.command == "withdraw-link":
         action = make_action("withdraw", owner, operator, "owner", owner_key or "", {})
         print_link(action, config, f"Withdraw all SOMI and USDso and revoke operator permissions for {MARKET}")
