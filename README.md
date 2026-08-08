@@ -122,8 +122,11 @@ client prints the exact public read URL. Open that URL directly with an
 open/fetch/read tool; never use web search to find it or investigate proxy,
 workflow, environment, RPC, or mirror workarounds. If the one direct fallback
 also fails, give the user a short Markdown link to the exact URL and ask them to
-paste back the result. Link generation is offline and never sends the encrypted
-package to the relay.
+paste back the result. A hosted tool may reject a parameterized status URL even
+while the relay is healthy. In that case the balance is unknown: never infer
+that a wallet is unfunded, and never contradict or repeat a funding request to a
+user who has already said it is funded. Link generation is offline and never
+sends the encrypted package to the relay.
 
 ## Public/private boundary
 
@@ -156,7 +159,9 @@ Paste this prompt into a fresh window opened on the repository:
 > backend side. Then ask whether I want to provide existing disposable keys or
 > have you generate up to two missing wallets. Keep the roles I provide and guide me to
 > a state with two distinct keys and a sensibly funded `Owner`. Clearly show me
-> which address to fund, arrange `Operator` gas automatically when needed, and
+> which address to fund when fresh status says funding is needed; if a status
+> read fails, call the balance unknown rather than unfunded and preserve my
+> report that it is funded. Arrange `Operator` gas automatically when needed, and
 > use ordinary operational language rather than implementation details or
 > internal parameter names. Follow safety constraints silently instead of
 > telling me what you are not doing. Present one exact action link at a time and

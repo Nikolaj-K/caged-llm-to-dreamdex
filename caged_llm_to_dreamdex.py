@@ -429,7 +429,13 @@ def main(argv: list[str] | None = None) -> int:
         url = f"{config['base_url']}/v1/status/{owner}/{operator}.txt"
         print(f"OWNER={owner}\nOPERATOR={operator}\nSTATUS_URL={url}")
         ok, body = fetch_text(url)
-        print(body if ok else f"{body}; open STATUS_URL once with a direct open/fetch/read tool; do not search for it")
+        print(
+            body if ok else
+            f"{body}\nBALANCE_STATUS=UNKNOWN\n"
+            "Do not infer or say that either wallet is unfunded. Preserve any user report "
+            "that it is funded until fresh status is available. Open STATUS_URL once with "
+            "a direct open/fetch/read tool; do not search for it"
+        )
         return 0
     if args.command == "fund-link":
         parameters = {"operator_gas_policy": args.operator_gas_policy}

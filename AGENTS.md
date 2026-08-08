@@ -122,9 +122,19 @@ environment's networking.
 If that one direct fallback also fails, stop the retrieval attempt. Give the
 user the exact URL as a short Markdown link such as `[Check relay status](URL)`
 or `[Check action result](URL)` and ask them to open it and paste back the
-result. Do not continue into any state-dependent action until fresh state is
-available. This restriction applies only to public read URLs; execution `/tx`
-links must still never be opened by the LLM/tool environment.
+result. Some hosted browsing tools reject these parameterized public URLs even
+when the relay itself is healthy; that rejection says nothing about either
+wallet's balance.
+
+Until fresh status is available, describe the balance as **unknown**. Never
+infer, state, or imply that either wallet is unfunded merely because a GET
+failed. If the user has said the wallet is funded, preserve that report as
+unverified and do not contradict it or ask them to fund it again. Say, for
+example: “I could not read the balance here, so I do not know whether more
+funding is needed. Please open [Check relay status](URL) and paste the result.”
+Do not continue into any state-dependent action until fresh state is available.
+This restriction applies only to public read URLs; execution `/tx` links must
+still never be opened by the LLM/tool environment.
 
 ## Assign roles and explain funding plainly
 
@@ -162,8 +172,11 @@ links must still never be opened by the LLM/tool environment.
    `Operator`, explain the mismatch and ask whether to swap roles; do not swap
    them silently.
 
-4. Tell the user exactly which address to fund. For a fresh demo, describe the
-   balances operationally:
+4. When fresh status confirms that funding is needed—or when a newly generated
+   wallet is known not to have been funded yet—tell the user exactly which
+   address to fund. Do not give funding instructions as an unconditional part
+   of presenting two addresses. For a fresh demo that needs funding, describe
+   the balances operationally:
 
    - `Owner`: this is the wallet the user should fund. Roughly 95 SOMI is the
      intended vault scale, and a little extra—roughly 95–100 SOMI total—makes
@@ -185,9 +198,11 @@ links must still never be opened by the LLM/tool environment.
    you can swap some on [OpenSea](https://opensea.io/swap?toChain=somnia&toAddress=0x0000000000000000000000000000000000000000).” Keep visible link labels short
    and descriptive; do not print the full destination URL in ordinary chat.
 
-6. When the user reports funding, query fresh `status` automatically rather than
-   asking them to prove it manually. Initial funding guidance must never become
-   a later balance floor after SOMI has moved into the vault or been spent.
+6. When the user reports funding, accept that statement and query fresh `status`
+   automatically. If the read is unavailable, use the single direct-link
+   fallback above; do not revert to saying or implying that the wallet is
+   unfunded. Initial funding guidance must never become a later balance floor
+   after SOMI has moved into the vault or been spent.
 
 Internally, use `top_up_to_target` for the normal fresh setup so an unfunded
 `Operator` receives gas from `Owner`. Do not say `top_up_to_target`, “gas
@@ -249,7 +264,9 @@ paths, Python or runtime details, internal option names, negative safety-rule
 narration, or protocol parameters unless they are needed to explain a genuine
 problem or the user asks for technical detail.
 
-After wallet resolution, use a compact status such as:
+After wallet resolution, show the addresses first. Then report what fresh status
+actually establishes. If it confirms that funding is needed, use a compact
+status such as:
 
 ```text
 `Owner`:
@@ -263,6 +280,12 @@ This wallet only needs gas; I can arrange about 1 SOMI from `Owner` during setup
 I have both private keys and can use them for this flow. You will not need to
 see or copy them. If you want, I can show them to you explicitly.
 ```
+
+If status instead shows sufficient wallet or vault funds, say that the pair is
+ready for the next action and do not repeat initial funding guidance. If status
+cannot be read, say that the balance is unknown, preserve any user report that
+it is funded, and give the one short manual status link. Never turn an
+unavailable read into “Fund this wallet” or “tell me once it is funded.”
 
 Before execution:
 
