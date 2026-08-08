@@ -86,6 +86,26 @@ these fallbacks instead of stopping:
 Keep environment diagnostics concise. The user's experience should center on
 the wallets and next action, not on package-manager narration.
 
+## Read relay state directly; never search for it
+
+Live `status` and `result` reads are exact public GETs, not web-research tasks.
+They contain public addresses and state but no private keys. Run the client's
+`status` or `result` command first. If its direct GET fails, it prints the exact
+public read URL.
+
+Open that exact URL once with an available direct open, fetch, browse, or read
+tool. Never submit a search-engine query for a status or result URL, and never
+search for mirrors, proxies, alternate RPCs, workflows, environment settings,
+or other websites as a workaround. Do not repeatedly diagnose the hosted
+environment's networking.
+
+If that one direct fallback also fails, stop the retrieval attempt. Give the
+user the exact URL as a short Markdown link such as `[Check relay status](URL)`
+or `[Check action result](URL)` and ask them to open it and paste back the
+result. Do not continue into any state-dependent action until fresh state is
+available. This restriction applies only to public read URLs; execution `/tx`
+links must still never be opened by the LLM/tool environment.
+
 ## Assign roles and explain funding plainly
 
 1. Always format wallet role names, wallet addresses, and any explicitly

@@ -420,7 +420,7 @@ def main(argv: list[str] | None = None) -> int:
             raise ClientError("intent ID must be 32 lowercase hex characters")
         url = f"{config['base_url']}/v1/result/{args.intent_id}.txt"
         ok, body = fetch_text(url)
-        print(body if ok else f"{body}; open this public URL with a browsing/read tool:\n{url}")
+        print(body if ok else f"{body}; open this exact public URL once with a direct open/fetch/read tool; do not search for it:\n{url}")
         return 0
     owner, owner_key = role_address(getattr(args, "owner_address", None), args.owner_key_file, "owner")
     operator, operator_key = role_address(getattr(args, "operator_address", None), args.operator_key_file, "operator")
@@ -429,7 +429,7 @@ def main(argv: list[str] | None = None) -> int:
         url = f"{config['base_url']}/v1/status/{owner}/{operator}.txt"
         print(f"OWNER={owner}\nOPERATOR={operator}\nSTATUS_URL={url}")
         ok, body = fetch_text(url)
-        print(body if ok else f"{body}; open STATUS_URL with a browsing/read tool")
+        print(body if ok else f"{body}; open STATUS_URL once with a direct open/fetch/read tool; do not search for it")
         return 0
     if args.command == "fund-link":
         parameters = {"operator_gas_policy": args.operator_gas_policy}

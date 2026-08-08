@@ -118,8 +118,12 @@ python caged_llm_to_dreamdex.py result 0123456789abcdef0123456789abcdef
 ```
 
 `status` and `result` use public GET requests. If a GET is unavailable, the
-client prints the exact public read URL for the LLM's browsing tool. Link
-generation is offline and never sends the encrypted package to the relay.
+client prints the exact public read URL. Open that URL directly with an
+open/fetch/read tool; never use web search to find it or investigate proxy,
+workflow, environment, RPC, or mirror workarounds. If the one direct fallback
+also fails, give the user a short Markdown link to the exact URL and ask them to
+paste back the result. Link generation is offline and never sends the encrypted
+package to the relay.
 
 ## Public/private boundary
 

@@ -344,9 +344,11 @@ def test_status_and_result_fallback_urls_are_read_only_and_offline(
         f"https://relay.example.invalid/v1/status/{owner}/{operator}.txt"
     ]
     assert "STATUS_URL=" in stdout and stderr == ""
+    assert "direct open/fetch/read tool; do not search for it" in stdout
 
     intent_id = "ab" * 16
     stdout, stderr = invoke(capsys, relay_key, ["result", intent_id])
+    assert "direct open/fetch/read tool; do not search for it" in stdout
     assert requested[-1] == (
         f"https://relay.example.invalid/v1/result/{intent_id}.txt"
     )
