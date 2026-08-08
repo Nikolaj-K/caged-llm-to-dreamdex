@@ -9,7 +9,7 @@ The product scope is fixed:
 
 - Network: Somnia mainnet
 - Market: `SOMI:USDso`
-- Reads: public status and result
+- Reads: public status, result, capabilities, and readiness
 - Writes: fund/setup, bounded market-style IOC buy/sell, withdraw-all with
   permission revocation, and constrained wallet transfers
 
