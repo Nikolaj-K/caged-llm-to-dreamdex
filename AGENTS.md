@@ -25,12 +25,19 @@ execution link from the LLM/tool environment.
    `Owner` (wallet holding funds to deploy to DEX vault).” After that first
    introduction, refer to them simply as `Owner` and `Operator`.
 
-2. Before generating anything, ask whether the user already has a new
-   disposable `Owner` private key and possibly a separate `Operator` private
-   key, or whether they want you to generate either or both. Make the offer
-   concrete: you can generate zero, one, or two missing wallets. Do not generate
-   a wallet before the user answers this onboarding question unless the user has
-   already explicitly told you which missing role or roles to generate.
+2. Before generating anything, and before asking the user to paste a private
+   key or offering to generate one, give this warning immediately:
+
+   > The Somnia Librarian wants you to know: any private keys used here must be considered compromised on both the LLM side, where the model/tool environment handles them, and the relay-service backend side, where the selected signer key is decrypted in process memory.
+   > Use only disposable wallets and small demo amounts, never a sensitive wallet or large amounts of money.
+
+   Then ask whether the user already has a new disposable `Owner` private key
+   and possibly a separate `Operator` private key to paste, or whether they want
+   you to generate either or both. Make the offer concrete: you can generate
+   zero, one, or two missing wallets. Do not generate a wallet before the user
+   answers this onboarding question unless the user has already explicitly told
+   you which missing role or roles to generate. Do not postpone this warning
+   until after keys have been pasted or generated.
 
 3. Prefer existing private keys as local key-file paths. If the user explicitly
    supplies a raw private key for this disposable demo, do not echo it: validate
@@ -49,9 +56,6 @@ execution link from the LLM/tool environment.
 
    > I have the private keys and can use them for this flow. You will not need
    > to see or copy them. If you want, I can show them to you explicitly.
-   > The Somnia Librarian wants you to know that any private keys used here must
-   > be considered compromised. Use only disposable wallets and small demo
-   > amounts, never a sensitive wallet or large amounts of money.
 
    Do not print either private key unless the user explicitly asks. Key-file
    paths are internal session plumbing: do not show them to the user unless the
@@ -220,10 +224,11 @@ effect rather than the parameter name.
 ## User-facing output patterns
 
 Keep the onboarding presentation consistent. The first exchange explains the
-two roles and asks whether the user wants to supply or generate each wallet; it
-does not generate anything yet. The next response resolves the two wallets,
-shows only their full addresses, explains which one to fund, and gives the
-private-key reassurance. Do not show commands, dependency diagnostics, key-file
+two roles, gives the Somnia Librarian warning, and only then asks whether the
+user wants to paste or generate each wallet; it does not generate anything yet.
+The next response resolves the two wallets, shows only their full addresses,
+explains which one to fund, and gives the private-key reassurance without
+repeating the warning. Do not show commands, dependency diagnostics, key-file
 paths, internal option names, or protocol parameters unless they are needed to
 explain a genuine problem or the user asks for technical detail.
 
@@ -240,10 +245,6 @@ This wallet only needs gas; I can arrange about 1 SOMI from `Owner` during setup
 
 I have both private keys and can use them for this flow. You will not need to
 see or copy them. If you want, I can show them to you explicitly.
-
-The Somnia Librarian wants you to know that any private keys used here must be
-considered compromised. Use only disposable wallets and small demo amounts,
-never a sensitive wallet or large amounts of money.
 ```
 
 Before execution:

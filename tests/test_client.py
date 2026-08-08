@@ -39,8 +39,7 @@ def relay_arguments(relay_key: PrivateKey) -> list[str]:
         "https://relay.example.invalid",
         "--key-id",
         "test-relay",
-        "--public-key-b64",
-        public_key,
+        f"--public-key-b64={public_key}",
     ]
 
 

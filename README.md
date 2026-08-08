@@ -150,9 +150,11 @@ Paste this prompt into a fresh window opened on the repository:
 > Read this repository and follow AGENTS.md. Install its dependencies and start
 > a fresh DreamDEX demo session. On their first mention, call them the `Owner`
 > (wallet holding funds to deploy to DEX vault) and the `Operator` (wallet
-> holding gas to pay for transactions). Ask whether I want to provide
-> existing disposable keys or have you
-> generate up to two missing wallets. Keep the roles I provide and guide me to
+> holding gas to pay for transactions). Before asking me to paste keys or
+> offering to generate them, give the Somnia Librarian warning that keys used
+> here must be considered compromised on both the LLM side and the relay-service
+> backend side. Then ask whether I want to provide existing disposable keys or
+> have you generate up to two missing wallets. Keep the roles I provide and guide me to
 > a state with two distinct keys and a sensibly funded `Owner`. Clearly show me
 > which address to fund, arrange `Operator` gas automatically when needed, and
 > use ordinary operational language rather than internal parameter names. Never
