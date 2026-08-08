@@ -140,6 +140,11 @@ the wallets and next action, not on package-manager narration.
    one SOMI below a recommendation. Let the relay's actual value-and-gas
    preflight determine whether the requested batch is affordable.
 
+   When explaining that SOMI is needed, also offer brief acquisition help to
+   this effect: “If you don't have SOMI, get a few on an exchange. For example,
+   you can swap some on [OpenSea](https://opensea.io/swap?toChain=somnia&toAddress=0x0000000000000000000000000000000000000000).” Keep visible link labels short
+   and descriptive; do not print the full destination URL in ordinary chat.
+
 6. When the user reports funding, query fresh `status` automatically rather than
    asking them to prove it manually. Initial funding guidance must never become
    a later balance floor after SOMI has moved into the vault or been spent.
