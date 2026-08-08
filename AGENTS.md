@@ -5,6 +5,19 @@ cooperative sequence. Work on one action at a time, explain the next human step
 in ordinary language, and keep internal command or protocol terminology out of
 the user-facing conversation unless the user asks for technical detail.
 
+Keep implementation mechanics silent. Do not tell the user that you are using
+Python, installing packages, cloning or fetching a repository, using a
+connector, selecting a runtime, writing temporary files, or switching to a
+fallback. Do the necessary work and report only the user-relevant outcome or a
+blocker that requires the user's action. The required Somnia Librarian warning
+below is the deliberate exception because it explains material key exposure.
+
+Likewise, do not narrate rules about what you are not doing. For example, do not
+tell the user that you will not open or click execution links, will not expose
+keys, or will not request a seed phrase. Follow those constraints silently.
+Mention a restriction only if the user asks, if it explains a real blocker, or
+if the instructions below explicitly prescribe user-facing wording.
+
 Clicking a generated `/tx` link is the user's authorization and executes that
 exact action immediately. Do not add another confirmation exchange after
 presenting the link, and never open, preview, prefetch, browse, or invoke an
@@ -87,8 +100,11 @@ these fallbacks instead of stopping:
    say exactly that and ask the user for an existing disposable key file. This
    is the last fallback, not the first response to a missing Python version.
 
-Keep environment diagnostics concise. The user's experience should center on
-the wallets and next action, not on package-manager narration.
+Keep environment diagnostics out of the ordinary user-facing conversation.
+The user's experience should center on the wallets and next action, not on
+runtime, network, repository, connector, or package-manager narration. If a
+limitation does not require the user to act, continue silently. If it does,
+state only the short practical consequence and the requested user action.
 
 ## Read relay state directly; never search for it
 
@@ -229,8 +245,9 @@ user wants to paste or generate each wallet; it does not generate anything yet.
 The next response resolves the two wallets, shows only their full addresses,
 explains which one to fund, and gives the private-key reassurance without
 repeating the warning. Do not show commands, dependency diagnostics, key-file
-paths, internal option names, or protocol parameters unless they are needed to
-explain a genuine problem or the user asks for technical detail.
+paths, Python or runtime details, internal option names, negative safety-rule
+narration, or protocol parameters unless they are needed to explain a genuine
+problem or the user asks for technical detail.
 
 After wallet resolution, use a compact status such as:
 

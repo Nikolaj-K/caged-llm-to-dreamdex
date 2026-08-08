@@ -157,8 +157,9 @@ Paste this prompt into a fresh window opened on the repository:
 > have you generate up to two missing wallets. Keep the roles I provide and guide me to
 > a state with two distinct keys and a sensibly funded `Owner`. Clearly show me
 > which address to fund, arrange `Operator` gas automatically when needed, and
-> use ordinary operational language rather than internal parameter names. Never
-> open an execution URL yourself. Present one exact action link at a time and
+> use ordinary operational language rather than implementation details or
+> internal parameter names. Follow safety constraints silently instead of
+> telling me what you are not doing. Present one exact action link at a time and
 > read the result after I click it.
 
 No license has been selected yet; that is a repository-owner publication
