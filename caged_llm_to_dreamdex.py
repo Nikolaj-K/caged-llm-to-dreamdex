@@ -38,6 +38,7 @@ DNS_HOST_RE = re.compile(
     r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
 )
 MAX_DECIMAL_PLACES = 18
+WITHDRAW_FIELDS = {"assets"}
 
 
 class ClientError(ValueError):
@@ -179,6 +180,18 @@ def checked_pair(owner: str, operator: str) -> tuple[str, str]:
     return normalized_owner, normalized_operator
 
 
+def checked_withdraw_parameters(parameters: Any) -> tuple[tuple[str, ...], bool]:
+    """Validate explicit selective-withdrawal parameters."""
+    if not isinstance(parameters, dict) or set(parameters) != WITHDRAW_FIELDS:
+        raise ClientError("withdraw parameters have unknown or missing fields")
+    assets = parameters["assets"]
+    if not isinstance(assets, list) or tuple(assets) not in {
+        ("SOMI",), ("USDso",), ("SOMI", "USDso"),
+    }:
+        raise ClientError("withdraw assets must be SOMI, USDso, or canonical SOMI then USDso")
+    return tuple(assets), len(assets) == 2
+
+
 def validate_relay_origin(value: Any, *, allow_insecure_local: bool = False) -> str:
     if not isinstance(value, str):
         raise ClientError("relay base URL must be one exact origin")
@@ -271,8 +284,7 @@ def make_action(
         if set(parameters) != {"operator_gas_policy"} or parameters["operator_gas_policy"] not in {"manual", "top_up_to_target"}:
             raise ClientError("fund requires operator_gas_policy manual or top_up_to_target")
     elif operation == "withdraw":
-        if parameters:
-            raise ClientError("withdraw parameters must be empty")
+        checked_withdraw_parameters(parameters)
     elif operation == "trade":
         if set(parameters) != {"side", "input_asset", "input_amount", "max_slippage_bps"}:
             raise ClientError("trade parameters have unknown or missing fields")
@@ -394,6 +406,7 @@ def build_parser() -> argparse.ArgumentParser:
     withdraw = commands.add_parser("withdraw-link")
     add_identity(withdraw, "owner", require_key=True)
     add_identity(withdraw, "operator")
+    withdraw.add_argument("--assets", choices=("SOMI", "USDso", "both"), default="both")
     transfer = commands.add_parser("transfer-link")
     add_identity(transfer, "owner")
     add_identity(transfer, "operator")
@@ -449,8 +462,17 @@ def main(argv: list[str] | None = None) -> int:
             "actual planned value and gas determine feasibility",
         )
     elif args.command == "withdraw-link":
-        action = make_action("withdraw", owner, operator, "owner", owner_key or "", {})
-        print_link(action, config, f"Withdraw all SOMI and USDso and revoke operator permissions for {MARKET}")
+        assets = ["SOMI", "USDso"] if args.assets == "both" else [args.assets]
+        revoke = len(assets) == 2
+        parameters = {"assets": assets}
+        action = make_action("withdraw", owner, operator, "owner", owner_key or "", parameters)
+        asset_text = " and ".join(assets)
+        permission_text = "revoke" if revoke else "keep"
+        print_link(
+            action, config,
+            f"Withdraw all vault {asset_text} to the owner wallet and {permission_text} "
+            f"operator permissions for {MARKET}",
+        )
     elif args.command == "transfer-link":
         signer_key = owner_key if args.from_role == "owner" else operator_key
         if signer_key is None:

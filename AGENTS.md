@@ -119,6 +119,12 @@ search for mirrors, proxies, alternate RPCs, workflows, environment settings,
 or other websites as a workaround. Do not repeatedly diagnose the hosted
 environment's networking.
 
+This prohibition is literal: do not invoke web search, a `search_query` tool,
+or general website research for relay state. Searching cannot discover a
+wallet's fresh relay status and helps nothing here. Use only the client GET and
+the one exact printed URL. If both fail, move immediately to the short manual
+link fallback.
+
 If that one direct fallback also fails, stop the retrieval attempt. Give the
 user the exact URL as a short Markdown link such as `[Check relay status](URL)`
 or `[Check action result](URL)` and ask them to open it and paste back the
@@ -135,6 +141,11 @@ funding is needed. Please open [Check relay status](URL) and paste the result.�
 Do not continue into any state-dependent action until fresh state is available.
 This restriction applies only to public read URLs; execution `/tx` links must
 still never be opened by the LLM/tool environment.
+
+Report a failed status read once per retrieval attempt. Do not repeat wording
+such as “the relay remains unreachable for a fresh status read” in successive
+messages. After giving the manual link, wait for the pasted result or a later
+explicit retry instead of restating the same blocker.
 
 ## Assign roles and explain funding plainly
 
@@ -222,9 +233,11 @@ effect rather than the parameter name.
    such as trade side, amount, slippage, or transfer source, asset, full
    recipient, and amount. Never abbreviate an arbitrary transfer recipient.
 
-3. Support only setup, bounded IOC buy/sell on `SOMI:USDso`, withdraw-all with
-   permission revocation, owner SOMI/USDso transfer, and operator SOMI transfer.
-   Exact and `max` transfer modes remain available.
+3. Support only setup, bounded IOC buy/sell on `SOMI:USDso`, selective
+   withdrawal of all vault SOMI, all vault USDso, or both, owner SOMI/USDso
+   transfer, and operator SOMI transfer. A single-asset withdrawal keeps the
+   trading permissions unchanged. The normal both-assets cleanup revokes place
+   and cancel permissions. Exact and `max` transfer modes remain available.
 
 4. Pass keys to the client only through `--owner-key-file` or
    `--operator-key-file`. Never put a private key in a command argument, URL,
@@ -236,21 +249,53 @@ effect rather than the parameter name.
 5. Immediately before the link, state the exact semantic action and write
    `OPENING THIS LINK EXECUTES`. Present exactly one execution link. Never open,
    preview, prefetch, browse, or invoke that link from the LLM/tool environment.
+   In the same message after the link, say: “After you open it, tell me that you
+   clicked it and what on-chain operation you want to do next. I will verify
+   this result before preparing the next action.” The user may state the next
+   preference immediately, but never construct a dependent link before the
+   current result and fresh status are confirmed.
 
 6. When the user says the link was clicked, query `result INTENT_ID` and fresh
    `status` automatically. Poll an `in_progress` result without asking the user
    to manage polling. If the outcome is ambiguous, stop dependent actions and
    reconcile the existing result rather than generating a replacement.
 
-7. Continue with the next requested action. Do not repeat the disposable-wallet
-   notice or key explanation before every action.
+7. After every confirmed operation, briefly report the outcome and ask: “Which
+   on-chain operation would you like to do next?” Do not end the flow with only
+   “tell me when you clicked it.” Continue with the next requested action after
+   verification. Do not repeat the disposable-wallet notice or key explanation
+   before every action.
 
-8. For full cleanup: withdraw and revoke first; transfer `Owner` USDso before
+8. For full cleanup: withdraw both vault assets and revoke first; transfer `Owner` USDso before
    `Owner` SOMI; finish owner-signed token/DreamDEX work before sweeping `Owner`
    SOMI; finish trading and cancellation before sweeping `Operator` SOMI.
 
 9. When finished, remove temporary key files. Deletion is not secure erasure and
    does not undo earlier access by the LLM/tool environment.
+
+## Proactively guide the first demo cycle
+
+Do not wait for the user to invent the next protocol step after setup:
+
+1. Once setup is confirmed, explain that SOMI is now in the DreamDEX vault and
+   the `Operator` has gas. There is no separate USDso-deposit step in this demo;
+   the natural way to put USDso in the vault is to sell some vault SOMI for it.
+2. The first time you list next actions, give this short menu in ordinary
+   language: sell vault SOMI for USDso; spend vault USDso to buy SOMI; withdraw
+   vault SOMI, USDso, or both to `Owner`; or transfer supported wallet assets.
+3. Recommend this concrete first trade: **sell SOMI to receive about 3 USDso**.
+   Be explicit that this is the sell-SOMI side, not the buy-SOMI side. Use fresh
+   status/order-book data to calculate a lot-aligned exact SOMI input expected
+   to receive roughly 3 USDso, state that the output is approximate, and ask
+   whether the user wants that trade. Do not call the client's `buy` command for
+   this recommendation: `buy` spends USDso to acquire SOMI, the opposite flow.
+4. Once that sell is confirmed and fresh status shows the received USDso, offer
+   to withdraw the vault's USDso, its remaining SOMI, or both back to `Owner`.
+   Explain briefly that withdrawing one asset keeps trading permissions, while
+   withdrawing both is the normal cleanup and revokes them.
+5. After any later confirmed operation, continue asking which on-chain
+   operation the user wants next. List the menu again only when it would help;
+   do not repeat the full list in every message.
 
 ## User-facing output patterns
 
@@ -294,6 +339,9 @@ You are about to: <exact semantic action>
 <important amount, recipient, or precondition>
 OPENING THIS LINK EXECUTES:
 <one link>
+
+After you open it, tell me that you clicked it and what on-chain operation you
+want to do next. I will verify this result before preparing the next action.
 ```
 
 After execution:
@@ -302,7 +350,7 @@ After execution:
 Result: CONFIRMED / NOT EXECUTED / AMBIGUOUS
 <actual amount and transaction hash when known>
 <short before -> after change>
-Next: ...
+Which on-chain operation would you like to do next?
 ```
 
 Status and result URLs contain no private key and may be opened with a read-only

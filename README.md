@@ -7,7 +7,7 @@ links for exact actions on Somnia mainnet. The live relay is
 [`https://somnia.run/tx`](https://somnia.run/tx).
 
 The demo supports initial SOMI funding/setup, bounded market-style IOC buys and
-sells on `SOMI:USDso`, full vault withdrawal with permission revocation, and
+sells on `SOMI:USDso`, selective withdrawal of vault SOMI, USDso, or both, and
 constrained owner/operator wallet transfers. It does not support limit orders,
 arbitrary contracts or calldata, other markets, seed phrases, custody,
 strategies, or autonomous trading.
@@ -55,6 +55,13 @@ SOMI balance for gas; about 1 SOMI is recommended rather than required.
 One concise notice is enough: these are disposable mainnet demo wallets, so use
 only the small amount intended for the experiment.
 
+After setup confirms, the normal guided demo proposes selling a calculated,
+lot-aligned SOMI amount expected to receive about 3 USDso. This is explicitly a
+SOMI **sell**; the `buy` command below does the opposite and spends USDso to buy
+SOMI. After the sell confirms, offer to return vault USDso, remaining vault
+SOMI, or both to the owner. Withdrawing one asset keeps trading permissions;
+the default both-assets cleanup revokes them.
+
 ## Commands
 
 Use the full addresses and key-file paths printed by `generate-wallets`.
@@ -89,7 +96,21 @@ python caged_llm_to_dreamdex.py trade-link \
   buy --usdso 1 --max-slippage-bps 100
 ```
 
-Withdraw the entire vault and revoke operator permissions:
+Withdraw only USDso or only SOMI while keeping trading permissions:
+
+```sh
+python caged_llm_to_dreamdex.py withdraw-link \
+  --owner-key-file /temporary/path/owner.key \
+  --operator-address 0xFULL_OPERATOR_ADDRESS \
+  --assets USDso
+
+python caged_llm_to_dreamdex.py withdraw-link \
+  --owner-key-file /temporary/path/owner.key \
+  --operator-address 0xFULL_OPERATOR_ADDRESS \
+  --assets SOMI
+```
+
+Withdraw both assets and revoke operator permissions:
 
 ```sh
 python caged_llm_to_dreamdex.py withdraw-link \
@@ -128,6 +149,11 @@ that a wallet is unfunded, and never contradict or repeat a funding request to a
 user who has already said it is funded. Link generation is offline and never
 sends the encrypted package to the relay.
 
+Never replace the exact GET fallback with web search: search results cannot
+provide fresh wallet state. Report an unavailable read once, provide the short
+manual status link, and do not repeat “the relay remains unreachable” in later
+messages while waiting for the result.
+
 ## Public/private boundary
 
 This repository contains only the public protocol client and public relay
@@ -165,7 +191,11 @@ Paste this prompt into a fresh window opened on the repository:
 > use ordinary operational language rather than implementation details or
 > internal parameter names. Follow safety constraints silently instead of
 > telling me what you are not doing. Present one exact action link at a time and
-> read the result after I click it.
+> read the result after I click it. In every link message, ask me both to report
+> the click and to say which on-chain operation I want next, while verifying the
+> current result before preparing another link. After setup, list the available
+> operations once and recommend selling SOMI to receive about 3 USDso. After
+> that sell confirms, offer to withdraw USDso, SOMI, or both back to `Owner`.
 
 No license has been selected yet; that is a repository-owner publication
 decision rather than a runtime requirement.

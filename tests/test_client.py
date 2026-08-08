@@ -201,7 +201,9 @@ def test_noncanonical_decimals_are_rejected(value: str) -> None:
         "fund-top-up-default",
         "sell",
         "buy",
-        "withdraw",
+        "withdraw-both",
+        "withdraw-somi",
+        "withdraw-usdso",
         "owner-somi-exact",
         "owner-somi-max",
         "owner-usdso-exact",
@@ -251,13 +253,17 @@ def test_every_link_form_encrypts_exactly_one_correct_signer_key(
             "input_amount": "1.25",
             "max_slippage_bps": "100",
         }
-    elif case == "withdraw":
+    elif case.startswith("withdraw-"):
+        asset = case.split("-", 1)[1]
+        asset_arg = {"both": "both", "somi": "SOMI", "usdso": "USDso"}[asset]
         command = [
             "withdraw-link", "--owner-key-file", owner_path,
-            "--operator-address", operator,
+            "--operator-address", operator, "--assets", asset_arg,
         ]
         operation, signer_role = "withdraw", "owner"
-        expected_parameters = {}
+        expected_parameters = {
+            "assets": ["SOMI", "USDso"] if asset == "both" else [asset_arg],
+        }
     else:
         signer_role = "operator" if case.startswith("operator-") else "owner"
         asset = "USDso" if "usdso" in case else "SOMI"
