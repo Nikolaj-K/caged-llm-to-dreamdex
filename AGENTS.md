@@ -1,52 +1,63 @@
-# Operating protocol for an LLM
+# Operating procedure for an LLM
 
-This repository is the complete public client. Read it before handling keys.
-Use the strongest available reasoning mode for transaction work, but never
-treat reasoning strength as a correctness or security control.
+Correct operation is concise: normally use at most 150 words and 14 short
+lines, one decision or execution link at a time, and no table unless asked.
+Never abbreviate an arbitrary transfer recipient. Explain implementation,
+cryptography, or transaction phases only when asked.
 
-Before asking for keys, tell the user all of the following:
+1. Say once: `Unsafe demo: use only fresh disposable wallets and trivial funds.`
+2. Offer two choices: the user supplies fresh owner and operator EVM private
+   keys (preferred), or `generate-wallets` creates two session wallets. Never
+   request, accept, or generate a seed phrase.
+3. Pass keys only through `--owner-key-file` or `--operator-key-file`. Never put
+   one in a command argument, URL, log, or normal response. Every action encrypts
+   exactly the selected signer key; the relay backend can decrypt it and briefly
+   holds plaintext in process memory while signing.
+4. After generation report full addresses and key-file paths, then say: `The two
+   private keys are not shown. They remain available to this session while its
+   temporary workspace persists, and I can show either key when you ask. Treat
+   both wallets as disposable.` Reveal a generated key only on explicit request.
+5. Query fresh `status`. Report only the balances, vault, permissions, orders,
+   market, and observed block needed for the next decision.
+6. Fresh setup requires owner `>99 SOMI`; operator gas target is `>=1 SOMI`.
+   If owner is not ready, ask for a little over 99 SOMI and stop. If operator is
+   below target, offer manual funding or owner-signed `top_up_to_target`.
+7. Support only fund/setup, bounded IOC buy/sell on `SOMI:USDso`, withdraw-all
+   plus permission revocation, owner SOMI/USDso transfer, and operator SOMI
+   transfer. Transfers require a full explicit recipient and exact or max amount.
+8. For full cleanup: withdraw/revoke first; transfer owner USDso before owner
+   SOMI; finish all owner-signed token/DEX work before sweeping owner SOMI; finish
+   trading/cancellation before sweeping operator SOMI.
+9. Immediately before a link, give a one-line reminder, the exact action, and
+   `OPENING THIS LINK EXECUTES`. Never open, preview, prefetch, or invoke it.
+10. After every opened link, query `result INTENT_ID` and fresh `status`. Poll an
+    in-progress result. On ambiguous or unresolved state, stop until reconciled.
+11. When finished, remove temporary key files. Deletion is not secure erasure
+    and does not undo disclosure to the LLM or tool environment.
 
-- This is a minimal experimental implementation and is not safe.
-- Only newly created disposable wallets with trivial funds may be used.
-- Both private keys entered into the conversation must be treated as
-  permanently compromised.
-- Every execution link contains one private key encrypted to the relay; the
-  relay holds the decryption key and can recover it.
-- The relay is trusted infrastructure, not a trustless system.
-- Opening an armed link automatically attempts exactly its one-time action; the
-  browser page has no confirmation button.
+Use these compact forms with actual full values:
 
-Then follow this procedure exactly:
+```text
+Owner: 0xFULL_ADDRESS
+Operator: 0xFULL_ADDRESS
+Owner wallet: ... SOMI, ... USDso
+Operator wallet: ... SOMI
+Vault: ... SOMI, ... USDso
+Next: ...
+```
 
-1. Ask for exactly two newly generated disposable EVM private keys: owner and
-   operator. Never ask for a seed phrase.
-2. Put them into separate temporary files with mode `0600`, without echoing
-   either key in a command, log, or response. Deleting a file does not undo its
-   disclosure in the conversation.
-3. Derive and display both public addresses with the client.
-4. Run `status` and clearly report owner wallet SOMI/USDso, operator wallet
-   SOMI/USDso, owner vault SOMI/USDso for `SOMI:USDso`, manual-vault mode,
-   operator place/cancel permissions, owner open orders, best bid/ask, and the
-   observed block.
-5. Setup requires strictly more than 99 SOMI in the owner wallet and strictly
-   more than 4 SOMI in the operator wallet. The operator must already be funded;
-   setup never transfers owner SOMI to the operator.
-6. As soon as those conditions hold, generate the `fund-link`. Immediately
-   before presenting it, restate the exact action and label it clearly:
-   `OPENING THIS LINK EXECUTES`.
-7. Never open, invoke, or preview an execution URL with an execution-capable
-   browser. Present it to the user. A normal preview is inert because the
-   ciphertext is in the URL fragment and the initial GET does nothing.
-8. Before every trade or withdrawal link, restate its exact action. Only fund,
-   market-style IOC buy/sell on `SOMI:USDso`, and withdraw-all plus permission
-   revocation are supported. Refuse generic transfers, arbitrary recipients or
-   calls, other markets, limit/GTC/post-only orders, and strategies.
-9. After the user opens a link, query both `result` and fresh `status`. Never
-   claim success from page text or receipt status alone. Poll `IN PROGRESS`;
-   when a result is `AMBIGUOUS`, do not create another trade or withdrawal.
-10. Delete both temporary key files after withdrawal/cleanup or when the user
-    stops. Do not claim that deletion makes disclosed keys safe.
+```text
+You want to: <exact semantic action>
+<important amount/recipient/precondition>
+OPENING THIS LINK EXECUTES:
+<link>
+```
 
-When an ordinary status/result GET cannot run in the code environment, use its
-printed public `.txt` URL with the available browsing/read tool. Never send a
-private key to status or result endpoints.
+```text
+Result: CONFIRMED / NOT EXECUTED / AMBIGUOUS
+<actual amount and transaction hash when known>
+<short before -> after change>
+Next: ...
+```
+
+Status/result URLs contain no key and may be opened with a read-only tool.

@@ -10,6 +10,7 @@ import os
 import re
 import secrets
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -24,11 +25,13 @@ from nacl.public import PublicKey, SealedBox
 PROTOCOL = 1
 CHAIN_ID = 5031
 MARKET = "SOMI:USDso"
-LIFETIMES = {"fund": 900, "trade": 180, "withdraw": 900}
+LIFETIMES = {"fund": 900, "trade": 180, "withdraw": 900, "transfer": 900}
+SECP256K1_ORDER = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 INTENT_RE = re.compile(r"^[0-9a-f]{32}$")
 ADDRESS_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
 PRIVATE_KEY_RE = re.compile(r"^0x[0-9a-f]{64}$")
 KEY_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+MAX_DECIMAL_PLACES = 18
 
 
 class ClientError(ValueError):
@@ -53,6 +56,8 @@ def canonical_json(value: dict[str, Any]) -> bytes:
 def canonical_decimal(value: str, *, positive: bool) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?", value):
         raise ClientError("amounts must be ordinary nonnegative decimal strings")
+    if "." in value and len(value.split(".", 1)[1]) > MAX_DECIMAL_PLACES:
+        raise ClientError("decimals may have at most 18 fractional decimal places")
     try:
         number = Decimal(value)
     except InvalidOperation as exc:
@@ -84,6 +89,56 @@ def read_private_key(path_value: str) -> str:
 
 def derive_address(private_key: str) -> str:
     return Account.from_key(private_key).address
+
+
+def generate_private_key(randbelow=secrets.randbelow) -> str:
+    scalar = randbelow(SECP256K1_ORDER - 1) + 1
+    if not 1 <= scalar < SECP256K1_ORDER:
+        raise ClientError("secure randomness returned an invalid private scalar")
+    return "0x" + scalar.to_bytes(32, "big").hex()
+
+
+def _inside(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def generate_wallets(output_dir: str | None = None) -> tuple[str, str, Path, Path]:
+    workspace = Path(__file__).resolve().parent.parent
+    forbidden = (workspace / "caged-llm-to-dreamdex", workspace / "caged-llm-dreamdex-relay",
+                 workspace / "handoff", workspace / "tmp")
+    if output_dir:
+        directory = Path(output_dir).expanduser().resolve()
+        if any(_inside(directory, root.resolve()) for root in forbidden):
+            raise ClientError("session wallet directory cannot be inside a repository or project archive")
+        if directory.exists():
+            raise ClientError(f"session wallet directory already exists: {directory}")
+        directory.mkdir(mode=0o700, parents=True)
+    else:
+        directory = Path(tempfile.mkdtemp(prefix="caged-dreamdex-wallets-")).resolve()
+    if any(_inside(directory, root.resolve()) for root in forbidden):
+        directory.rmdir()
+        raise ClientError("session wallet directory cannot be inside a repository or project archive")
+    directory.chmod(0o700)
+    owner_key, operator_key = generate_private_key(), generate_private_key()
+    paths = (directory / "owner.key", directory / "operator.key")
+    try:
+        for path, key in zip(paths, (owner_key, operator_key), strict=True):
+            descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            try:
+                os.write(descriptor, (key + "\n").encode("ascii"))
+            finally:
+                os.close(descriptor)
+            path.chmod(0o600)
+    except Exception:
+        for path in paths:
+            path.unlink(missing_ok=True)
+        directory.rmdir()
+        raise
+    return derive_address(owner_key), derive_address(operator_key), *paths
 
 
 def checked_address(value: str) -> str:
@@ -119,7 +174,7 @@ def load_config(args: argparse.Namespace) -> dict[str, Any]:
     }.items() if v is not None})
     config.setdefault("protocol", PROTOCOL)
     if config.get("protocol") != PROTOCOL:
-        raise ClientError("relay protocol must be 1")
+        raise ClientError("relay and client protocol do not match")
     if "base_url" not in config:
         raise ClientError("relay base URL is not configured")
     config["base_url"] = str(config["base_url"]).rstrip("/")
@@ -140,14 +195,19 @@ def make_action(
     if operation not in LIFETIMES:
         raise ClientError("unsupported operation")
     expected_role = "operator" if operation == "trade" else "owner"
-    if signer_role != expected_role:
+    if operation == "transfer":
+        expected_role = signer_role
+    if expected_role not in {"owner", "operator"} or signer_role != expected_role:
         raise ClientError("wrong signer role for operation")
     if derive_address(signer_key) != (operator if signer_role == "operator" else owner):
         raise ClientError("signer key does not match declared signer address")
-    if operation in {"fund", "withdraw"}:
+    if operation == "fund":
+        if set(parameters) != {"operator_gas_policy"} or parameters["operator_gas_policy"] not in {"manual", "top_up_to_target"}:
+            raise ClientError("fund requires operator_gas_policy manual or top_up_to_target")
+    elif operation == "withdraw":
         if parameters:
-            raise ClientError(f"{operation} parameters must be empty")
-    else:
+            raise ClientError("withdraw parameters must be empty")
+    elif operation == "trade":
         if set(parameters) != {"side", "input_asset", "input_amount", "max_slippage_bps"}:
             raise ClientError("trade parameters have unknown or missing fields")
         side = parameters["side"]
@@ -155,6 +215,20 @@ def make_action(
             raise ClientError("sell uses SOMI; buy uses USDso")
         parameters["input_amount"] = canonical_decimal(parameters["input_amount"], positive=True)
         parameters["max_slippage_bps"] = canonical_decimal(parameters["max_slippage_bps"], positive=False)
+    else:
+        mode = parameters.get("amount_mode")
+        expected = {"asset", "recipient", "amount_mode"} | ({"amount"} if mode == "exact" else set())
+        if set(parameters) != expected or mode not in {"exact", "max"}:
+            raise ClientError("transfer requires an exact amount or max mode")
+        asset = parameters["asset"]
+        if (signer_role, asset) not in {("owner", "SOMI"), ("owner", "USDso"), ("operator", "SOMI")}:
+            raise ClientError("unsupported signer and transfer asset combination")
+        recipient = checked_address(parameters["recipient"])
+        if int(recipient, 16) == 0:
+            raise ClientError("transfer recipient cannot be the zero address")
+        parameters["recipient"] = recipient
+        if mode == "exact":
+            parameters["amount"] = canonical_decimal(parameters["amount"], positive=True)
     created = int(time.time()) if now is None else now
     identity = secrets.token_hex(16) if intent_id is None else intent_id
     if not INTENT_RE.fullmatch(identity):
@@ -217,12 +291,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--key-id")
     parser.add_argument("--public-key-b64")
     commands = parser.add_subparsers(dest="command", required=True)
+    wallets = commands.add_parser("generate-wallets")
+    wallets.add_argument("--output-dir")
     status = commands.add_parser("status")
     add_identity(status, "owner")
     add_identity(status, "operator")
     fund = commands.add_parser("fund-link")
     add_identity(fund, "owner", require_key=True)
     add_identity(fund, "operator")
+    fund.add_argument("--operator-gas-policy", choices=("manual", "top_up_to_target"), required=True)
     trade = commands.add_parser("trade-link")
     add_identity(trade, "owner")
     add_identity(trade, "operator", require_key=True)
@@ -236,6 +313,15 @@ def build_parser() -> argparse.ArgumentParser:
     withdraw = commands.add_parser("withdraw-link")
     add_identity(withdraw, "owner", require_key=True)
     add_identity(withdraw, "operator")
+    transfer = commands.add_parser("transfer-link")
+    add_identity(transfer, "owner")
+    add_identity(transfer, "operator")
+    transfer.add_argument("--from", dest="from_role", choices=("owner", "operator"), required=True)
+    transfer.add_argument("--asset", choices=("SOMI", "USDso"), required=True)
+    transfer.add_argument("--to", required=True)
+    amount = transfer.add_mutually_exclusive_group(required=True)
+    amount.add_argument("--amount")
+    amount.add_argument("--all", action="store_true")
     result = commands.add_parser("result")
     result.add_argument("intent_id")
     return parser
@@ -243,6 +329,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "generate-wallets":
+        owner, operator, owner_path, operator_path = generate_wallets(args.output_dir)
+        print(f"OWNER={owner}\nOPERATOR={operator}\nOWNER_KEY_FILE={owner_path}\nOPERATOR_KEY_FILE={operator_path}")
+        return 0
     config = load_config(args)
     if args.command == "result":
         if not INTENT_RE.fullmatch(args.intent_id):
@@ -260,11 +350,24 @@ def main(argv: list[str] | None = None) -> int:
         print(body if ok else f"{body}; open STATUS_URL with a browsing/read tool")
         return 0
     if args.command == "fund-link":
-        action = make_action("fund", owner, operator, "owner", owner_key or "", {})
-        print_link(action, config, f"Fund owner DreamDEX vault to 95 SOMI and enable operator permissions for {MARKET}")
+        parameters = {"operator_gas_policy": args.operator_gas_policy}
+        action = make_action("fund", owner, operator, "owner", owner_key or "", parameters)
+        top_up = "top up operator to 1 SOMI if needed" if args.operator_gas_policy == "top_up_to_target" else "require manual operator gas funding"
+        print_link(action, config, f"Reach the 95 SOMI vault and operator-permission targets; {top_up}")
     elif args.command == "withdraw-link":
         action = make_action("withdraw", owner, operator, "owner", owner_key or "", {})
         print_link(action, config, f"Withdraw all SOMI and USDso and revoke operator permissions for {MARKET}")
+    elif args.command == "transfer-link":
+        signer_key = owner_key if args.from_role == "owner" else operator_key
+        if signer_key is None:
+            raise ClientError(f"the {args.from_role} signer must be provided with a key file")
+        parameters = {"asset": args.asset, "recipient": args.to,
+                      "amount_mode": "max" if args.all else "exact"}
+        if not args.all:
+            parameters["amount"] = args.amount
+        action = make_action("transfer", owner, operator, args.from_role, signer_key or "", parameters)
+        amount_text = "all available" if args.all else args.amount
+        print_link(action, config, f"Transfer {amount_text} {args.asset} from the {args.from_role} wallet to {parameters['recipient']}")
     else:
         asset, amount = ("SOMI", args.somi) if args.side == "sell" else ("USDso", args.usdso)
         parameters = {"side": args.side, "input_asset": asset, "input_amount": amount, "max_slippage_bps": args.max_slippage_bps}
