@@ -6,6 +6,9 @@ links for exact actions on Somnia mainnet. The live relay is
 [`https://somnia.run`](https://somnia.run), and its execution page is
 [`https://somnia.run/tx`](https://somnia.run/tx).
 
+Somnia mainnet is the only network in this protocol: it is EVM chain ID `5031`
+and uses Ethereum-style `0x...` addresses. It is not Solana.
+
 The demo supports initial SOMI funding/setup, bounded market-style IOC buys and
 sells on `SOMI:USDso`, selective withdrawal of vault SOMI, USDso, or both, and
 constrained owner/operator wallet transfers. It does not support limit orders,
@@ -138,21 +141,31 @@ Read the durable result after clicking a link:
 python caged_llm_to_dreamdex.py result 0123456789abcdef0123456789abcdef
 ```
 
-`status` and `result` use public GET requests. If a GET is unavailable, the
-client prints the exact public read URL. Open that URL directly with an
-open/fetch/read tool; never use web search to find it or investigate proxy,
-workflow, environment, RPC, or mirror workarounds. If the one direct fallback
-also fails, give the user a short Markdown link to the exact URL and ask them to
-paste back the result. A hosted tool may reject a parameterized status URL even
-while the relay is healthy. In that case the balance is unknown: never infer
-that a wallet is unfunded, and never contradict or repeat a funding request to a
-user who has already said it is funded. Link generation is offline and never
-sends the encrypted package to the relay.
+`status` and `result` use public GET requests. If a status GET is unavailable,
+the client prints the exact relay URL plus direct official Somnia explorer URLs
+for both wallets. Open those URLs directly; never use web search to find them or
+investigate proxy, workflow, environment, RPC, or mirror workarounds. The
+explorer fallback can establish wallet SOMI—and visible wallet tokens such as
+USDso—but not internal DreamDEX vault balances, permissions, orders, or book
+state. A hosted tool may reject a parameterized status URL even while the relay
+is healthy. Never infer that a wallet is unfunded, and never contradict or
+repeat a funding request to a user who has already said it is funded. Link
+generation is offline and never sends the encrypted package to the relay.
 
-Never replace the exact GET fallback with web search: search results cannot
-provide fresh wallet state. Report an unavailable read once, provide the short
-manual status link, and do not repeat “the relay remains unreachable” in later
-messages while waiting for the result.
+Never replace direct reads with web search: search results cannot provide fresh
+wallet state. Keep failed read mechanics out of ordinary conversation. Ask the
+user to copy a specific status or balance row only when that value is genuinely
+needed to define or verify the next action; otherwise continue without
+interrupting the flow.
+
+An agent-side status GET is useful but is not a universal prerequisite for link
+generation. The execution page always performs a fresh chain read and preflight
+before broadcasting. If the hosted environment cannot read status, the agent
+may still prepare target-state setup, withdrawal of all selected assets,
+exact/`max` transfers, and exact-input trades; the page will execute or show
+`NOT READY` without broadcasting. Fresh status remains necessary when the agent
+must calculate an action parameter from balances or the order book, or verify a
+preceding action before preparing a dependent one.
 
 ## Public/private boundary
 
@@ -196,6 +209,14 @@ Paste this prompt into a fresh window opened on the repository:
 > current result before preparing another link. After setup, list the available
 > operations once and recommend selling SOMI to receive about 3 USDso. After
 > that sell confirms, offer to withdraw USDso, SOMI, or both back to `Owner`.
+> Do not make a failed agent-side status GET a universal blocker: for a fully
+> specified action, let the execution page perform fresh preflight. Require a
+> pasted status/result only when live state is needed to define or verify the
+> next action. If relay status is unavailable, directly inspect the two official
+> Somnia explorer address pages for wallet SOMI without narrating the retrieval
+> mechanics. After setup, point me to the `Owner DreamDEX vault: SOMI` and
+> `Owner DreamDEX vault: USDso` rows on the execution page, but only ask me to
+> copy a row when its value is actually needed.
 
 No license has been selected yet; that is a repository-owner publication
 decision rather than a runtime requirement.

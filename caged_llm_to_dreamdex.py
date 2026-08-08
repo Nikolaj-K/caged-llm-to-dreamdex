@@ -39,6 +39,7 @@ DNS_HOST_RE = re.compile(
 )
 MAX_DECIMAL_PLACES = 18
 WITHDRAW_FIELDS = {"assets"}
+EXPLORER_BASE_URL = "https://explorer.somnia.network"
 
 
 class ClientError(ValueError):
@@ -440,14 +441,19 @@ def main(argv: list[str] | None = None) -> int:
     owner, operator = checked_pair(owner, operator)
     if args.command == "status":
         url = f"{config['base_url']}/v1/status/{owner}/{operator}.txt"
-        print(f"OWNER={owner}\nOPERATOR={operator}\nSTATUS_URL={url}")
+        print(
+            f"OWNER={owner}\nOPERATOR={operator}\nSTATUS_URL={url}\n"
+            f"OWNER_EXPLORER_URL={EXPLORER_BASE_URL}/address/{owner}\n"
+            f"OPERATOR_EXPLORER_URL={EXPLORER_BASE_URL}/address/{operator}"
+        )
         ok, body = fetch_text(url)
         print(
             body if ok else
             f"{body}\nBALANCE_STATUS=UNKNOWN\n"
             "Do not infer or say that either wallet is unfunded. Preserve any user report "
             "that it is funded until fresh status is available. Open STATUS_URL once with "
-            "a direct open/fetch/read tool; do not search for it"
+            "a direct open/fetch/read tool; if that fails, directly inspect the two printed "
+            "official explorer URLs for wallet-level SOMI. Do not web-search for any URL"
         )
         return 0
     if args.command == "fund-link":

@@ -11,6 +11,8 @@ from nacl.public import PrivateKey, PublicKey, SealedBox
 
 import caged_llm_to_dreamdex as client
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 @pytest.fixture
 def wallets(tmp_path: Path) -> dict[str, object]:
@@ -349,7 +351,10 @@ def test_status_and_result_fallback_urls_are_read_only_and_offline(
         f"https://relay.example.invalid/v1/status/{owner}/{operator}.txt"
     ]
     assert "STATUS_URL=" in stdout and stderr == ""
-    assert "direct open/fetch/read tool; do not search for it" in stdout
+    assert "direct open/fetch/read tool" in stdout
+    assert "official explorer URLs for wallet-level SOMI" in stdout
+    assert f"OWNER_EXPLORER_URL=https://explorer.somnia.network/address/{owner}" in stdout
+    assert f"OPERATOR_EXPLORER_URL=https://explorer.somnia.network/address/{operator}" in stdout
     assert "BALANCE_STATUS=UNKNOWN" in stdout
     assert "Do not infer or say that either wallet is unfunded" in stdout
     assert "Preserve any user report that it is funded" in stdout
@@ -362,3 +367,22 @@ def test_status_and_result_fallback_urls_are_read_only_and_offline(
     )
     assert requested[-1] in stdout and stderr == ""
     assert all("/tx" not in url for url in requested)
+
+
+def test_agent_instructions_pin_somnia_identity_and_fallback_voice() -> None:
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    for phrase in (
+        "**Somnia mainnet**",
+        "EVM chain ID `5031`",
+        "It is not\nSolana",
+        "**Somnia/DreamDEX status**",
+        "I need the user to paste",
+        "Prioritize the native SOMI balance",
+        "Explorer evidence is wallet-level only",
+        "Keep the retrieval mechanics out of ordinary conversation",
+        "`Owner DreamDEX vault: SOMI`",
+        "do not ask them to copy the values unless a value",
+    ):
+        assert phrase in agents
+    assert "It is not Solana" in readme

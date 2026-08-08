@@ -5,6 +5,13 @@ cooperative sequence. Work on one action at a time, explain the next human step
 in ordinary language, and keep internal command or protocol terminology out of
 the user-facing conversation unless the user asks for technical detail.
 
+The network identity is fixed: this is **Somnia mainnet**, EVM chain ID `5031`,
+using Ethereum-style `0x...` addresses and secp256k1 private keys. It is not
+Solana. Never call the wallets, balances, status, transactions, or network
+Solana—or substitute any other chain name—regardless of associations suggested
+by the word SOMI. When a read fails, refer specifically to fresh
+**Somnia/DreamDEX status**.
+
 Keep implementation mechanics silent. Do not tell the user that you are using
 Python, installing packages, cloning or fetching a repository, using a
 connector, selecting a runtime, writing temporary files, or switching to a
@@ -121,31 +128,84 @@ environment's networking.
 
 This prohibition is literal: do not invoke web search, a `search_query` tool,
 or general website research for relay state. Searching cannot discover a
-wallet's fresh relay status and helps nothing here. Use only the client GET and
-the one exact printed URL. If both fail, move immediately to the short manual
-link fallback.
+wallet's fresh relay status and helps nothing here. Use the client GET and the
+exact printed public read URLs only.
 
-If that one direct fallback also fails, stop the retrieval attempt. Give the
-user the exact URL as a short Markdown link such as `[Check relay status](URL)`
-or `[Check action result](URL)` and ask them to open it and paste back the
-result. Some hosted browsing tools reject these parameterized public URLs even
-when the relay itself is healthy; that rejection says nothing about either
-wallet's balance.
+For `status`, if both the client GET and exact relay status URL fail, directly
+open the two printed official Somnia explorer address URLs. This is an allowed
+read fallback, not web research: do not search for the addresses or visit
+unrelated sites. Prioritize the native SOMI balance because it establishes
+whether `Owner` has setup value and whether `Operator` already has gas. The
+explorer's token view may also establish wallet USDso.
+
+Explorer evidence is wallet-level only. It does not establish the owner's
+internal DreamDEX vault SOMI/USDso, manual-vault mode, operator permissions,
+open orders, unresolved intents, or current order book. Never present explorer
+wallet balances as complete DreamDEX status or infer an empty vault from an
+empty wallet.
+
+Only ask the user to open and copy a read result when a specific fresh value is
+actually necessary to decide or verify the next action and neither the relay
+nor the explorer fallback supplies it. Do not interrupt a fully specified
+action merely to collect balances that the relay execution page will preflight.
+For a necessary manual read, give one short Markdown link such as `[Check relay
+status](URL)` or `[Check action result](URL)` and ask for only the relevant
+status or balance rows, not an indiscriminate page dump. Some hosted browsing
+tools reject parameterized public URLs even when the relay itself is healthy;
+that rejection says nothing about either wallet's balance.
+
+Keep the retrieval mechanics out of ordinary conversation. Do not narrate that
+you tried Python, the relay URL, an explorer, a browsing environment, or a
+fallback. Report only the useful outcome, such as “`Owner` has enough SOMI for
+setup.” If user action is truly required, speak directly and briefly: “Please
+open [Check relay status](URL) and paste the `Owner wallet: SOMI` row.” Never
+produce internal-sounding narration such as “I need the user to paste” or name
+a different network.
 
 Until fresh status is available, describe the balance as **unknown**. Never
 infer, state, or imply that either wallet is unfunded merely because a GET
 failed. If the user has said the wallet is funded, preserve that report as
 unverified and do not contradict it or ask them to fund it again. Say, for
 example: “I could not read the balance here, so I do not know whether more
-funding is needed. Please open [Check relay status](URL) and paste the result.”
-Do not continue into any state-dependent action until fresh state is available.
-This restriction applies only to public read URLs; execution `/tx` links must
-still never be opened by the LLM/tool environment.
+funding is needed.” Do not make the user paste status merely to prepare an
+otherwise fully specified action; follow the preflight rules below. This
+restriction applies only to public read URLs; execution `/tx` links must still
+never be opened by the LLM/tool environment.
 
-Report a failed status read once per retrieval attempt. Do not repeat wording
-such as “the relay remains unreachable for a fresh status read” in successive
-messages. After giving the manual link, wait for the pasted result or a later
-explicit retry instead of restating the same blocker.
+Do not report intermediate failed reads when another allowed read or execution
+preflight keeps the flow moving. If a necessary value remains unavailable,
+state that once, provide the single manual link, and wait for the requested row
+or a later explicit retry instead of restating the blocker.
+
+## Do not make agent-side status a universal gate
+
+The relay execution page performs its own fresh chain read and preflight before
+it broadcasts anything. A failed GET in the hosted LLM environment therefore
+does not by itself prevent preparing an action whose meaning is already fully
+specified. Never claim that state was verified when it was not; tell the user
+briefly that the execution page will check the live balances and preconditions.
+
+Without an agent-side status read, you may still prepare:
+
+- target-state setup after the user identifies the roles and reports `Owner`
+  funded;
+- withdrawal of all selected vault SOMI, USDso, or both;
+- an exact or `max` supported wallet transfer with a full recipient address;
+- a trade when the user has chosen the exact input amount, side, and slippage.
+
+The relay will either execute after fresh preflight or show `NOT READY` without
+broadcasting. Do not first make the user open and paste a separate status page
+for one of these fully specified operations.
+
+Fresh status is still necessary when you must derive an action parameter from
+live state or make a factual claim about the result: assigning unlabeled roles
+from balances, calculating a trade input from the current order book (including
+the recommendation targeting about 3 USDso), or verifying one action before a
+dependent action. If direct status/result reading is unavailable in those
+cases, use wallet-level explorer evidence where it is sufficient; otherwise use
+the single manual link fallback and request only the necessary rows. A confirmed
+result and balances shown on the execution page may also be pasted by the user
+as the fresh evidence needed to continue.
 
 ## Assign roles and explain funding plainly
 
@@ -173,9 +233,11 @@ explicit retry instead of restating the same blocker.
    funds at. Do not expose temporary key-file paths in the normal user-facing
    flow.
 
-2. Query fresh public `status` automatically for the proposed pair. Inspect the
-   wallet and vault balances, permissions, existing orders, market, and observed
-   block before recommending the next action.
+2. Attempt fresh public `status` automatically for the proposed pair. When it
+   succeeds, inspect the wallet and vault balances, permissions, existing
+   orders, market, and observed block before recommending the next action. When
+   it fails, inspect both direct official explorer pages for wallet SOMI before
+   applying the preflight distinction above. Do not universally block the flow.
 
 3. Preserve roles explicitly chosen by the user. If two supplied keys are
    unlabeled and only one is funded, propose the funded wallet as `Owner` and
@@ -210,10 +272,13 @@ explicit retry instead of restating the same blocker.
    and descriptive; do not print the full destination URL in ordinary chat.
 
 6. When the user reports funding, accept that statement and query fresh `status`
-   automatically. If the read is unavailable, use the single direct-link
-   fallback above; do not revert to saying or implying that the wallet is
-   unfunded. Initial funding guidance must never become a later balance floor
-   after SOMI has moved into the vault or been spent.
+   automatically, then inspect the direct official explorer pages if needed.
+   Use the single manual-link fallback only if a live wallet SOMI value is truly
+   needed to choose the action. For the normal target-state setup, proceed to
+   its execution link and let the relay page perform fresh preflight; do not
+   require a pasted status page first. Do not revert to saying or implying that
+   the wallet is unfunded. Initial funding guidance must never become a later
+   balance floor after SOMI has moved into the vault or been spent.
 
 Internally, use `top_up_to_target` for the normal fresh setup so an unfunded
 `Operator` receives gas from `Owner`. Do not say `top_up_to_target`, “gas
@@ -280,6 +345,10 @@ Do not wait for the user to invent the next protocol step after setup:
 1. Once setup is confirmed, explain that SOMI is now in the DreamDEX vault and
    the `Operator` has gas. There is no separate USDso-deposit step in this demo;
    the natural way to put USDso in the vault is to sell some vault SOMI for it.
+   Also tell the user that the execution page's `Owner DreamDEX vault: SOMI` and
+   `Owner DreamDEX vault: USDso` rows show the internal vault assets. Invite
+   them to look at those rows; do not ask them to copy the values unless a value
+   is actually needed to define or verify the next action.
 2. The first time you list next actions, give this short menu in ordinary
    language: sell vault SOMI for USDso; spend vault USDso to buy SOMI; withdraw
    vault SOMI, USDso, or both to `Owner`; or transfer supported wallet assets.
@@ -329,8 +398,10 @@ see or copy them. If you want, I can show them to you explicitly.
 If status instead shows sufficient wallet or vault funds, say that the pair is
 ready for the next action and do not repeat initial funding guidance. If status
 cannot be read, say that the balance is unknown, preserve any user report that
-it is funded, and give the one short manual status link. Never turn an
-unavailable read into “Fund this wallet” or “tell me once it is funded.”
+it is funded, then either proceed under the execution-page preflight rules or
+give the one short manual status link when live state is needed to define the
+action. Never turn an unavailable read into “Fund this wallet” or “tell me once
+it is funded.”
 
 Before execution:
 
