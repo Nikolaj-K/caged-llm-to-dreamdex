@@ -324,7 +324,7 @@ def execution_url(action: dict[str, Any], config: dict[str, Any]) -> str:
     )
     ciphertext = SealedBox(PublicKey(raw_key)).encrypt(canonical_json(action))
     package = f"v1.{key_id}.{b64url_encode(ciphertext)}"
-    return f"{base_url}/run#p={package}"
+    return f"{base_url}/tx#p={package}"
 
 
 def fetch_text(url: str) -> tuple[bool, str]:
