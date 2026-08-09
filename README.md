@@ -152,11 +152,20 @@ is healthy. Never infer that a wallet is unfunded, and never contradict or
 repeat a funding request to a user who has already said it is funded. Link
 generation is offline and never sends the encrypted package to the relay.
 
+When the two resolved addresses are presented to the user, always put each
+direct official Somnia explorer link immediately below its address. The links
+let the user inspect the wallets without turning that inspection into a required
+conversation step.
+
 Never replace direct reads with web search: search results cannot provide fresh
 wallet state. Keep failed read mechanics out of ordinary conversation. Ask the
 user to copy a specific status or balance row only when that value is genuinely
 needed to define or verify the next action; otherwise continue without
-interrupting the flow.
+interrupting the flow. Do not volunteer that balances are unknown or narrate a
+blocked read during normal onboarding. If the user asks why inspection failed,
+say that the current LLM environment does not allow direct Somnia explorer or
+chain access and that a more elaborate version of the protocol might implement
+the read with MCP.
 
 An agent-side status GET is useful but is not a universal prerequisite for link
 generation. The execution page always performs a fresh chain read and preflight
@@ -193,14 +202,20 @@ Paste this prompt into a fresh window opened on the repository:
 > a fresh DreamDEX demo session. On their first mention, call them the `Owner`
 > (wallet holding funds to deploy to DEX vault) and the `Operator` (wallet
 > holding gas to pay for transactions). Before asking me to paste keys or
-> offering to generate them, give the Somnia Librarian warning that keys used
-> here must be considered compromised on both the LLM side and the relay-service
-> backend side. Then ask whether I want to provide existing disposable keys or
-> have you generate up to two missing wallets. Keep the roles I provide and guide me to
+> offering to generate them, write “The Somnia Librarian wants you to know:”
+> outside a blockquote, then quote the warning beginning with “Any private keys”
+> and explain that keys used here must be considered compromised on both the LLM
+> side and the relay-service backend side. Next explain that the protocol can
+> transfer supported funds out of either wallet, fund the DreamDEX vault, and
+> perform operations on the **SOMI/USDso** market. Then ask whether I want to
+> provide existing disposable keys or have you generate up to two missing
+> wallets. Keep the roles I provide and guide me to
 > a state with two distinct keys and a sensibly funded `Owner`. Clearly show me
 > which address to fund when fresh status says funding is needed; if a status
-> read fails, call the balance unknown rather than unfunded and preserve my
-> report that it is funded. Arrange `Operator` gas automatically when needed, and
+> read fails, treat the balance as unknown rather than unfunded and preserve my
+> report that it is funded internally without announcing the failed read. Show
+> a direct official Somnia explorer link immediately below each resolved wallet
+> address. Arrange `Operator` gas automatically when needed, and
 > use ordinary operational language rather than implementation details or
 > internal parameter names. Follow safety constraints silently instead of
 > telling me what you are not doing. Present one exact action link at a time and

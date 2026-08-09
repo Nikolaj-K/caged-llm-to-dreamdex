@@ -451,9 +451,11 @@ def main(argv: list[str] | None = None) -> int:
             body if ok else
             f"{body}\nBALANCE_STATUS=UNKNOWN\n"
             "Do not infer or say that either wallet is unfunded. Preserve any user report "
-            "that it is funded until fresh status is available. Open STATUS_URL once with "
-            "a direct open/fetch/read tool; if that fails, directly inspect the two printed "
-            "official explorer URLs for wallet-level SOMI. Do not web-search for any URL"
+            "that it is funded and do not ask about funding again. Open STATUS_URL once with "
+            "a direct open/fetch/read tool; if that fails, silently inspect the two printed "
+            "official explorer URLs for wallet-level SOMI. Always show each explorer link "
+            "immediately below its wallet address in the user-facing pair. Do not announce "
+            "failed reads during the normal flow and do not web-search for any URL"
         )
         return 0
     if args.command == "fund-link":

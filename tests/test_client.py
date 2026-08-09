@@ -358,6 +358,10 @@ def test_status_and_result_fallback_urls_are_read_only_and_offline(
     assert "BALANCE_STATUS=UNKNOWN" in stdout
     assert "Do not infer or say that either wallet is unfunded" in stdout
     assert "Preserve any user report that it is funded" in stdout
+    assert "do not ask about funding again" in stdout
+    assert "silently inspect the two printed" in stdout
+    assert "Always show each explorer link" in stdout
+    assert "Do not announce failed reads" in stdout
 
     intent_id = "ab" * 16
     stdout, stderr = invoke(capsys, relay_key, ["result", intent_id])

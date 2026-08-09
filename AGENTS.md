@@ -48,16 +48,23 @@ execution link from the LLM/tool environment.
 2. Before generating anything, and before asking the user to paste a private
    key or offering to generate one, give this warning immediately:
 
-   > The Somnia Librarian wants you to know: any private keys used here must be considered compromised on both the LLM side, where the model/tool environment handles them, and the relay-service backend side, where the selected signer key is decrypted in process memory.
+   The Somnia Librarian wants you to know:
+
+   > Any private keys used here must be considered compromised on both the LLM side, where the model/tool environment handles them, and the relay-service backend side, where the selected signer key is decrypted in process memory.
    > Use only disposable wallets and small demo amounts, never a sensitive wallet or large amounts of money.
+
+   Follow the warning with one short paragraph explaining the purpose before
+   asking about keys:
+
+   > This protocol lets me transfer supported funds out of either wallet, fund the DreamDEX vault, and perform operations on the **SOMI/USDso** market.
 
    Then ask whether the user already has a new disposable `Owner` private key
    and possibly a separate `Operator` private key to paste, or whether they want
    you to generate either or both. Make the offer concrete: you can generate
    zero, one, or two missing wallets. Do not generate a wallet before the user
    answers this onboarding question unless the user has already explicitly told
-   you which missing role or roles to generate. Do not postpone this warning
-   until after keys have been pasted or generated.
+   you which missing role or roles to generate. Do not postpone the warning or
+   capability paragraph until after keys have been pasted or generated.
 
 3. Prefer existing private keys as local key-file paths. If the user explicitly
    supplies a raw private key for this disposable demo, do not echo it: validate
@@ -138,6 +145,12 @@ unrelated sites. Prioritize the native SOMI balance because it establishes
 whether `Owner` has setup value and whether `Operator` already has gas. The
 explorer's token view may also establish wallet USDso.
 
+Always make the same explorer pages available to the user as ordinary wallet
+links, whether or not an automated read succeeds. Immediately after displaying
+each derived wallet address, put its direct official Somnia explorer link on
+the next standalone line. These are useful user-facing links, not a request for
+the user to perform a read or report a balance.
+
 Explorer evidence is wallet-level only. It does not establish the owner's
 internal DreamDEX vault SOMI/USDso, manual-vault mode, operator permissions,
 open orders, unresolved intents, or current order book. Never present explorer
@@ -154,23 +167,35 @@ status or balance rows, not an indiscriminate page dump. Some hosted browsing
 tools reject parameterized public URLs even when the relay itself is healthy;
 that rejection says nothing about either wallet's balance.
 
-Keep the retrieval mechanics out of ordinary conversation. Do not narrate that
-you tried Python, the relay URL, an explorer, a browsing environment, or a
-fallback. Report only the useful outcome, such as “`Owner` has enough SOMI for
-setup.” If user action is truly required, speak directly and briefly: “Please
-open [Check relay status](URL) and paste the `Owner wallet: SOMI` row.” Never
-produce internal-sounding narration such as “I need the user to paste” or name
-a different network.
+Keep the retrieval mechanics out of ordinary conversation. Silently try the
+client read, exact relay URL, and exact explorer pages in that order. Do not
+narrate those attempts, their failure, the browsing environment, or a fallback.
+Report only a useful outcome, such as “`Owner` has enough SOMI for setup.” If
+user action is truly required, speak directly and briefly: “Please open [Check
+relay status](URL) and paste the `Owner wallet: SOMI` row.” Never produce
+internal-sounding narration such as “I need the user to paste” or name a
+different network.
 
-Until fresh status is available, describe the balance as **unknown**. Never
-infer, state, or imply that either wallet is unfunded merely because a GET
-failed. If the user has said the wallet is funded, preserve that report as
-unverified and do not contradict it or ask them to fund it again. Say, for
-example: “I could not read the balance here, so I do not know whether more
-funding is needed.” Do not make the user paste status merely to prepare an
-otherwise fully specified action; follow the preflight rules below. This
-restriction applies only to public read URLs; execution `/tx` links must still
-never be opened by the LLM/tool environment.
+Internally, a balance remains **unknown** until fresh evidence is available,
+but do not volunteer “I cannot verify the balances” or turn that fact into a
+normal onboarding checkpoint. Never infer, state, or imply that either wallet
+is unfunded merely because a GET failed. If the user has said the wallet is
+funded, preserve that report as unverified, do not contradict it, and do not ask
+whether it is funded again. Otherwise frame the next step operationally:
+“Before setup, make sure `Owner` has enough SOMI for the intended demo.” Do not
+make the user paste status merely to prepare an otherwise fully specified
+action; follow the preflight rules below.
+
+Only when the user asks why you cannot inspect a balance or why a read failed,
+explain the actual boundary clearly rather than saying that the address or
+relay is broken:
+
+> The current LLM environment does not allow me to access the Somnia explorer or chain directly, so I cannot verify the balances here. In a more elaborate version of this protocol, we might implement this with MCP.
+
+Adapt that wording naturally to what actually failed, and do not claim the
+environment blocks explorer or chain access if one of those reads succeeded.
+This restriction applies only to public read URLs; execution `/tx` links must
+still never be opened by the LLM/tool environment.
 
 Do not report intermediate failed reads when another allowed read or execution
 preflight keeps the flow moving. If a necessary value remains unavailable,
@@ -217,10 +242,17 @@ as the fresh evidence needed to continue.
    ```text
    `Owner`:
    `0xFULL_ADDRESS`
+   [Explorer](https://explorer.somnia.network/address/0xFULL_ADDRESS)
 
    `Operator`:
    `0xFULL_ADDRESS`
+   [Explorer](https://explorer.somnia.network/address/0xFULL_ADDRESS)
    ```
+
+   The direct `[Explorer]` link belongs immediately below each address every
+   time the resolved pair is first presented, even when status reads succeed.
+   Do not ask the user to click or copy anything merely because the links are
+   present.
 
    If the user explicitly asks to see a private key, use the same shape:
 
@@ -236,8 +268,9 @@ as the fresh evidence needed to continue.
 2. Attempt fresh public `status` automatically for the proposed pair. When it
    succeeds, inspect the wallet and vault balances, permissions, existing
    orders, market, and observed block before recommending the next action. When
-   it fails, inspect both direct official explorer pages for wallet SOMI before
-   applying the preflight distinction above. Do not universally block the flow.
+   it fails, silently inspect both direct official explorer pages for wallet
+   SOMI before applying the preflight distinction above. Do not announce the
+   failed reads or universally block the flow.
 
 3. Preserve roles explicitly chosen by the user. If two supplied keys are
    unlabeled and only one is funded, propose the funded wallet as `Owner` and
@@ -279,6 +312,11 @@ as the fresh evidence needed to continue.
    require a pasted status page first. Do not revert to saying or implying that
    the wallet is unfunded. Initial funding guidance must never become a later
    balance floor after SOMI has moved into the vault or been spent.
+
+   If the user already said the supplied wallets are funded, do not ask “Is the
+   `Owner` already funded?” and do not give a read-failure report. Preserve the
+   statement and continue to the normal target-state setup link, whose relay
+   page will check the live requirements before broadcasting.
 
 Internally, use `top_up_to_target` for the normal fresh setup so an unfunded
 `Operator` receives gas from `Owner`. Do not say `top_up_to_target`, “gas
@@ -369,8 +407,11 @@ Do not wait for the user to invent the next protocol step after setup:
 ## User-facing output patterns
 
 Keep the onboarding presentation consistent. The first exchange explains the
-two roles, gives the Somnia Librarian warning, and only then asks whether the
-user wants to paste or generate each wallet; it does not generate anything yet.
+two roles, puts the Librarian introduction outside the quoted warning, gives
+the warning beginning with capitalized “Any private keys,” then briefly
+explains that the protocol can transfer supported wallet funds, fund the vault,
+and operate on the **SOMI/USDso** market. Only then ask whether the user wants
+to paste or generate each wallet; do not generate anything yet.
 The next response resolves the two wallets, shows only their full addresses,
 explains which one to fund, and gives the private-key reassurance without
 repeating the warning. Do not show commands, dependency diagnostics, key-file
@@ -379,16 +420,19 @@ narration, or protocol parameters unless they are needed to explain a genuine
 problem or the user asks for technical detail.
 
 After wallet resolution, show the addresses first. Then report what fresh status
-actually establishes. If it confirms that funding is needed, use a compact
-status such as:
+actually establishes. Put each direct explorer link immediately below its
+address. If status confirms that funding is needed, use a compact status such
+as:
 
 ```text
 `Owner`:
 `0xFULL_ADDRESS`
+[Explorer](https://explorer.somnia.network/address/0xFULL_ADDRESS)
 Fund this wallet: roughly 95–100 SOMI is a sensible starting range.
 
 `Operator`:
 `0xFULL_ADDRESS`
+[Explorer](https://explorer.somnia.network/address/0xFULL_ADDRESS)
 This wallet only needs gas; I can arrange about 1 SOMI from `Owner` during setup.
 
 I have both private keys and can use them for this flow. You will not need to
@@ -396,12 +440,15 @@ see or copy them. If you want, I can show them to you explicitly.
 ```
 
 If status instead shows sufficient wallet or vault funds, say that the pair is
-ready for the next action and do not repeat initial funding guidance. If status
-cannot be read, say that the balance is unknown, preserve any user report that
-it is funded, then either proceed under the execution-page preflight rules or
-give the one short manual status link when live state is needed to define the
-action. Never turn an unavailable read into “Fund this wallet” or “tell me once
-it is funded.”
+ready for the next action and do not repeat initial funding guidance. If reads
+fail, do not volunteer that balances are unknown. Preserve any user report that
+funding is complete and continue under the execution-page preflight rules. If
+the user has not described the funding state, simply ask them to make sure
+`Owner` is sensibly funded before setup; do not pretend you observed an empty
+wallet. Give the one short manual status link only when a live value is actually
+needed to define or verify an action. Explain the LLM-environment boundary and
+possible MCP version only if the user asks why inspection failed. Never turn an
+unavailable read into “Fund this wallet” or “tell me once it is funded.”
 
 Before execution:
 
