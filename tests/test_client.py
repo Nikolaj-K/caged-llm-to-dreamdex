@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import builtins
 import json
 import stat
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from eth_account import Account
+import nacl._sodium
 from nacl.public import PrivateKey, PublicKey, SealedBox
 
 import caged_llm_to_dreamdex as client
@@ -118,6 +122,65 @@ def test_default_relay_configuration_is_canonical_and_public_only() -> None:
     assert len(client.b64_decode(payload["public_key_b64"])) == PublicKey.SIZE
     lowered = json.dumps(payload, sort_keys=True).lower()
     assert "private" not in lowered and "secret" not in lowered and "ticket" not in lowered
+
+
+def test_builtin_evm_crypto_matches_independent_vectors() -> None:
+    assert client.keccak_256(b"").hex() == (
+        "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+    )
+    for scalar in (1, 2, 3, 0x123456789ABCDEF, client.SECP256K1_ORDER - 1):
+        key = "0x" + scalar.to_bytes(32, "big").hex()
+        assert client.derive_address(key) == Account.from_key(key).address
+
+
+def test_private_key_input_is_normalized_before_packaging() -> None:
+    bare_upper = "A" * 64
+    assert client.checked_private_key(bare_upper) == "0x" + "a" * 64
+    with pytest.raises(client.ClientError, match="valid EVM private key"):
+        client.checked_private_key("0" * 64)
+
+
+def test_native_libsodium_fallback_preserves_sealed_box_wire_format(
+    monkeypatch: pytest.MonkeyPatch, relay_key: PrivateKey,
+) -> None:
+    original_import = builtins.__import__
+
+    def import_without_pynacl(name, *args, **kwargs):
+        if name == "nacl.public":
+            raise ImportError("simulated missing PyNaCl wrapper")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_pynacl)
+    monkeypatch.setattr(
+        client.ctypes.util, "find_library", lambda name: nacl._sodium.__file__,
+    )
+    plaintext = b"validated action fixture"
+    ciphertext = client._sealed_box_encrypt(bytes(relay_key.public_key), plaintext)
+    assert SealedBox(relay_key).decrypt(ciphertext) == plaintext
+
+
+def test_wallet_generation_runs_without_site_packages(tmp_path: Path) -> None:
+    output_dir = tmp_path / "no-site-wallet"
+    completed = subprocess.run(
+        [
+            sys.executable, "-S", str(ROOT / "caged_llm_to_dreamdex.py"),
+            "generate-wallet", "--output-dir", str(output_dir),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    values = dict(line.split("=", 1) for line in completed.stdout.splitlines())
+    assert values["OWNER_KEY_VALIDATED"] == "true"
+    assert values["OWNER_ADDRESS_MATCH_CONFIRMED"] == "true"
+    assert completed.stderr == ""
+
+
+def test_only_optional_sealed_box_wrapper_is_a_runtime_requirement() -> None:
+    runtime = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+    development = (ROOT / "requirements-dev.txt").read_text(encoding="utf-8")
+    assert runtime.strip() == "PyNaCl>=1.5,<2"
+    assert "eth-account" in development and "eth-utils" in development
 
 
 def test_config_parsing_accepts_exact_shape_and_rejects_extra_fields(
@@ -419,12 +482,15 @@ def test_status_and_result_fallback_urls_are_read_only_and_offline(
     assert f"OWNER_EXPLORER_URL=https://explorer.somnia.network/address/{owner}" in stdout
     assert f"OPERATOR_EXPLORER_URL=https://explorer.somnia.network/address/{operator}" in stdout
     assert "BALANCE_STATUS=UNKNOWN" in stdout
+    assert "[failed reading] The relay status GET was unavailable" in stdout
+    assert "Some hosted web reads are not expected to work" in stdout
     assert "Do not infer or say that a displayed wallet is unfunded" in stdout
-    assert "Preserve any user report that it is funded" in stdout
-    assert "do not ask about funding again" in stdout
-    assert "silently inspect the printed" in stdout
+    assert "inspect the printed official explorer" in stdout
     assert "Always show each explorer link" in stdout
-    assert "Do not announce failed reads" in stdout
+    assert "state the practical consequence briefly" in stdout
+    assert "Preserve any user report that it is funded" not in stdout
+    assert "do not ask about funding again" not in stdout
+    assert "Do not announce failed reads" not in stdout
 
     intent_id = "ab" * 16
     stdout, stderr = invoke(capsys, relay_key, ["result", intent_id])
@@ -466,3 +532,58 @@ def test_agent_instructions_pin_somnia_identity_and_fallback_voice() -> None:
     ):
         assert phrase in agents
     assert "It is not Solana" in readme
+
+
+def test_onboarding_uses_one_paragraph_per_concern_without_operator_repetition() -> None:
+    agents = " ".join((ROOT / "AGENTS.md").read_text(encoding="utf-8").split())
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    prompt = " ".join(
+        readme.split("## Start this in a new ChatGPT/Codex window", 1)[1]
+        .replace(">", " ")
+        .split()
+    )
+    assert "one concern per paragraph and no paraphrased repetition" in agents
+    assert "one optional `Operator` paragraph that serves as both explanation and offer" in agents
+    assert "Mention the optional `Operator` only once" in agents
+    assert prompt.count("`Operator` trade-signing key is possible but entirely optional") == 1
+    assert "Do not repeat this offer in a second paragraph" in prompt
+    assert prompt.index("First explain the required `Owner`") < prompt.index(
+        "Next use one paragraph—and only one"
+    ) < prompt.index("In its own paragraph") < prompt.index(
+        "End with one separate question"
+    )
+
+
+def test_action_preparation_is_one_shot_and_runtime_light() -> None:
+    agents = " ".join((ROOT / "AGENTS.md").read_text(encoding="utf-8").split())
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    prompt = " ".join(
+        readme.split("## Start this in a new ChatGPT/Codex window", 1)[1]
+        .replace(">", " ")
+        .split()
+    )
+    for phrase in (
+        "Prepare actions in one focused attempt",
+        "materialize the exact connector-returned",
+        "not permission to rewrite or reconstruct it",
+        "do not probe or install packages before this first run",
+        "make at most one ordinary `requirements.txt` install attempt",
+        "stop promptly",
+        "[blocked executing]",
+        "Do not show placeholder commands",
+        "When the user asks to move quickly",
+        "Setup always targets 95",
+        "Once the user says to use 95",
+    ):
+        assert phrase in agents
+    for phrase in (
+        "Run the client before probing or installing anything",
+        "materialize its exact",
+        "run that unchanged copy and do not author a substitute",
+        "neither PyNaCl nor system `libsodium`",
+        "one short `[blocked executing]` paragraph",
+        "If I say not to think too long",
+        "After I accept 95",
+    ):
+        assert phrase in prompt
+    assert "Install its dependencies and start" not in prompt

@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import base64
+import ctypes
+import ctypes.util
 import json
 import os
 import re
@@ -19,18 +21,19 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from eth_account import Account
-from eth_utils import to_checksum_address
-from nacl.public import PublicKey, SealedBox
-
 PROTOCOL = 1
 CHAIN_ID = 5031
 MARKET = "SOMI:USDso"
 LIFETIMES = {"fund": 900, "trade": 180, "withdraw": 900, "transfer": 900}
+SECP256K1_FIELD = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
 SECP256K1_ORDER = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+SECP256K1_GENERATOR = (
+    0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798,
+    0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8,
+)
 INTENT_RE = re.compile(r"^[0-9a-f]{32}$")
 ADDRESS_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
-PRIVATE_KEY_RE = re.compile(r"^0x[0-9a-f]{64}$")
+PRIVATE_KEY_INPUT_RE = re.compile(r"^(?:0x)?[0-9a-fA-F]{64}$")
 KEY_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 B64URL_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 DNS_HOST_RE = re.compile(
@@ -41,9 +44,164 @@ MAX_DECIMAL_PLACES = 18
 WITHDRAW_FIELDS = {"assets"}
 EXPLORER_BASE_URL = "https://explorer.somnia.network"
 
+_MASK_64 = (1 << 64) - 1
+_KECCAK_ROTATIONS = (
+    (0, 36, 3, 41, 18),
+    (1, 44, 10, 45, 2),
+    (62, 6, 43, 15, 61),
+    (28, 55, 25, 21, 56),
+    (27, 20, 39, 8, 14),
+)
+_KECCAK_ROUND_CONSTANTS = (
+    0x0000000000000001, 0x0000000000008082, 0x800000000000808A,
+    0x8000000080008000, 0x000000000000808B, 0x0000000080000001,
+    0x8000000080008081, 0x8000000000008009, 0x000000000000008A,
+    0x0000000000000088, 0x0000000080008009, 0x000000008000000A,
+    0x000000008000808B, 0x800000000000008B, 0x8000000000008089,
+    0x8000000000008003, 0x8000000000008002, 0x8000000000000080,
+    0x000000000000800A, 0x800000008000000A, 0x8000000080008081,
+    0x8000000000008080, 0x0000000080000001, 0x8000000080008008,
+)
+
 
 class ClientError(ValueError):
     pass
+
+
+def _rotate_left_64(value: int, count: int) -> int:
+    if count == 0:
+        return value & _MASK_64
+    return ((value << count) | (value >> (64 - count))) & _MASK_64
+
+
+def _keccak_f1600(state: list[int]) -> None:
+    for round_constant in _KECCAK_ROUND_CONSTANTS:
+        columns = [
+            state[x] ^ state[x + 5] ^ state[x + 10] ^ state[x + 15] ^ state[x + 20]
+            for x in range(5)
+        ]
+        corrections = [
+            columns[(x - 1) % 5] ^ _rotate_left_64(columns[(x + 1) % 5], 1)
+            for x in range(5)
+        ]
+        for y in range(5):
+            for x in range(5):
+                state[x + 5 * y] ^= corrections[x]
+
+        rotated = [0] * 25
+        for y in range(5):
+            for x in range(5):
+                rotated[y + 5 * ((2 * x + 3 * y) % 5)] = _rotate_left_64(
+                    state[x + 5 * y], _KECCAK_ROTATIONS[x][y]
+                )
+        for y in range(5):
+            offset = 5 * y
+            for x in range(5):
+                state[offset + x] = (
+                    rotated[offset + x]
+                    ^ ((~rotated[offset + (x + 1) % 5]) & rotated[offset + (x + 2) % 5])
+                ) & _MASK_64
+        state[0] ^= round_constant
+
+
+def keccak_256(data: bytes) -> bytes:
+    """Return legacy Keccak-256, as used by EVM addresses (not NIST SHA3-256)."""
+    rate = 136
+    padded = bytearray(data)
+    padded.append(0x01)
+    padded.extend(b"\x00" * ((rate - 1 - len(padded)) % rate))
+    padded.append(0x80)
+    state = [0] * 25
+    for start in range(0, len(padded), rate):
+        block = padded[start:start + rate]
+        for lane in range(rate // 8):
+            state[lane] ^= int.from_bytes(block[lane * 8:(lane + 1) * 8], "little")
+        _keccak_f1600(state)
+    return b"".join(lane.to_bytes(8, "little") for lane in state)[:32]
+
+
+def _point_add(
+    first: tuple[int, int] | None, second: tuple[int, int] | None,
+) -> tuple[int, int] | None:
+    if first is None:
+        return second
+    if second is None:
+        return first
+    x1, y1 = first
+    x2, y2 = second
+    if x1 == x2 and (y1 + y2) % SECP256K1_FIELD == 0:
+        return None
+    if first == second:
+        slope = (3 * x1 * x1) * pow(2 * y1, -1, SECP256K1_FIELD)
+    else:
+        slope = (y2 - y1) * pow(x2 - x1, -1, SECP256K1_FIELD)
+    slope %= SECP256K1_FIELD
+    x3 = (slope * slope - x1 - x2) % SECP256K1_FIELD
+    return x3, (slope * (x1 - x3) - y1) % SECP256K1_FIELD
+
+
+def _scalar_multiply(scalar: int) -> tuple[int, int]:
+    result: tuple[int, int] | None = None
+    addend: tuple[int, int] | None = SECP256K1_GENERATOR
+    while scalar:
+        if scalar & 1:
+            result = _point_add(result, addend)
+        addend = _point_add(addend, addend)
+        scalar >>= 1
+    if result is None:
+        raise ClientError("private key is outside the secp256k1 scalar range")
+    return result
+
+
+def _checksum_address(lower_hex: str) -> str:
+    digest = keccak_256(lower_hex.encode("ascii")).hex()
+    return "0x" + "".join(
+        character.upper() if character in "abcdef" and int(digest[index], 16) >= 8 else character
+        for index, character in enumerate(lower_hex)
+    )
+
+
+def _sealed_box_encrypt(public_key: bytes, plaintext: bytes) -> bytes:
+    if len(public_key) != 32:
+        raise ClientError("relay public encryption key must be 32 bytes")
+    try:
+        from nacl.public import PublicKey, SealedBox
+    except ImportError:
+        PublicKey = SealedBox = None
+    if PublicKey is not None and SealedBox is not None:
+        return bytes(SealedBox(PublicKey(public_key)).encrypt(plaintext))
+
+    candidates = [ctypes.util.find_library("sodium"), "libsodium.so.23", "libsodium.so"]
+    library = None
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            library = ctypes.CDLL(candidate)
+            break
+        except OSError:
+            continue
+    if library is None:
+        raise ClientError(
+            "sealed-box encryption requires PyNaCl or the system libsodium library"
+        )
+    library.sodium_init.restype = ctypes.c_int
+    if library.sodium_init() < 0:
+        raise ClientError("system libsodium initialization failed")
+    library.crypto_box_publickeybytes.restype = ctypes.c_size_t
+    library.crypto_box_sealbytes.restype = ctypes.c_size_t
+    if library.crypto_box_publickeybytes() != 32:
+        raise ClientError("system libsodium has an incompatible public-key size")
+    output = ctypes.create_string_buffer(len(plaintext) + library.crypto_box_sealbytes())
+    message = ctypes.create_string_buffer(plaintext, len(plaintext))
+    recipient = ctypes.create_string_buffer(public_key, len(public_key))
+    library.crypto_box_seal.argtypes = (
+        ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_void_p,
+    )
+    library.crypto_box_seal.restype = ctypes.c_int
+    if library.crypto_box_seal(output, message, len(plaintext), recipient) != 0:
+        raise ClientError("system libsodium sealed-box encryption failed")
+    return output.raw
 
 
 def b64url_encode(data: bytes) -> str:
@@ -98,19 +256,22 @@ def read_private_key(path_value: str) -> str:
 
 
 def checked_private_key(value: Any, *, source: str = "private key") -> str:
-    if not isinstance(value, str) or not PRIVATE_KEY_RE.fullmatch(value):
+    if not isinstance(value, str) or not PRIVATE_KEY_INPUT_RE.fullmatch(value):
         raise ClientError(
-            f"{source} must contain canonical 0x plus 64 lowercase hex characters"
+            f"{source} must contain 32 bytes encoded as 64 hexadecimal characters"
         )
-    try:
-        Account.from_key(value)
-    except Exception as exc:
-        raise ClientError(f"{source} is not a valid EVM private key") from exc
-    return value
+    canonical = "0x" + value.removeprefix("0x").lower()
+    scalar = int(canonical[2:], 16)
+    if not 1 <= scalar < SECP256K1_ORDER:
+        raise ClientError(f"{source} is not a valid EVM private key")
+    return canonical
 
 
 def derive_address(private_key: str) -> str:
-    return Account.from_key(checked_private_key(private_key)).address
+    scalar = int(checked_private_key(private_key)[2:], 16)
+    x_coordinate, y_coordinate = _scalar_multiply(scalar)
+    public_key = x_coordinate.to_bytes(32, "big") + y_coordinate.to_bytes(32, "big")
+    return _checksum_address(keccak_256(public_key)[-20:].hex())
 
 
 def generate_private_key(randbelow=secrets.randbelow) -> str:
@@ -174,7 +335,7 @@ def generate_wallet(
 def checked_address(value: Any) -> str:
     if not isinstance(value, str) or not ADDRESS_RE.fullmatch(value):
         raise ClientError("address must be 0x plus 40 hex characters")
-    return to_checksum_address(value)
+    return _checksum_address(value[2:].lower())
 
 
 def checked_pair(owner: str, operator: str) -> tuple[str, str]:
@@ -377,13 +538,13 @@ def execution_url(action: dict[str, Any], config: dict[str, Any]) -> str:
     if not KEY_ID_RE.fullmatch(key_id):
         raise ClientError("relay key ID is invalid or missing")
     raw_key = b64_decode(str(config.get("public_key_b64", "")))
-    if len(raw_key) != PublicKey.SIZE:
+    if len(raw_key) != 32:
         raise ClientError("relay public encryption key must be 32 bytes")
     base_url = validate_relay_origin(
         config.get("base_url"),
         allow_insecure_local=bool(config.get("allow_insecure_local_relay", False)),
     )
-    ciphertext = SealedBox(PublicKey(raw_key)).encrypt(canonical_json(action))
+    ciphertext = _sealed_box_encrypt(raw_key, canonical_json(action))
     package = f"v1.{key_id}.{b64url_encode(ciphertext)}"
     return f"{base_url}/tx#p={package}"
 
@@ -524,12 +685,14 @@ def main(argv: list[str] | None = None) -> int:
         print(
             body if ok else
             f"{body}\nBALANCE_STATUS=UNKNOWN\n"
-            "Do not infer or say that a displayed wallet is unfunded. Preserve any user report "
-            "that it is funded and do not ask about funding again. Open STATUS_URL once with "
-            "a direct open/fetch/read tool; if that fails, silently inspect the printed "
-            "official explorer URL(s) for wallet-level SOMI. Always show each explorer link "
-            "immediately below its corresponding wallet address. Do not announce "
-            "failed reads during the normal flow and do not web-search for any URL"
+            "[failed reading] The relay status GET was unavailable. Some hosted web reads are "
+            "not expected to work even when the relay and wallets are healthy. Do not infer "
+            "or say that a displayed wallet is unfunded. Open STATUS_URL once with a direct "
+            "open/fetch/read tool; if that fails, inspect the printed official explorer "
+            "URL(s) for wallet-level SOMI. If you communicate a failed read, use "
+            "[failed reading] and state the practical consequence briefly. Always show each "
+            "explorer link immediately below its corresponding wallet address. Do not "
+            "web-search for any URL"
         )
         return 0
     if args.command == "fund-link":

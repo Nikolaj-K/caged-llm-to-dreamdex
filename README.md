@@ -26,16 +26,26 @@ invoke it.
 
 ## Requirements and installation
 
-Python 3.12 is the supported baseline. From a fresh checkout:
+The checked-in client runs on a modern Python 3 without the Ethereum Python
+packages. It implements its small fixed secp256k1/address-validation surface
+directly. For sealed-box encryption it uses PyNaCl when installed and otherwise
+uses the system `libsodium` library through Python's standard library. This is
+deliberate: a hosted LLM environment that can execute the repository and already
+has native `libsodium` can generate a fully validated link without installing
+anything.
+
+Run the client once before installing packages. On a machine without either
+PyNaCl or system `libsodium`, install the one portable runtime package:
 
 ```sh
-python3.12 -m venv .venv
+python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-The three runtime dependencies are `eth-account`, `eth-utils`, and `PyNaCl`.
-For local tests, also install `requirements-dev.txt`.
+For local tests, also install `requirements-dev.txt`; its Ethereum packages are
+independent compatibility oracles for the built-in implementation, not runtime
+requirements.
 
 ## Quick start
 
@@ -249,10 +259,10 @@ operations `fund`, `trade`, `withdraw`, and `transfer`.
 
 Paste this prompt into a fresh window opened on the repository:
 
-> Read this repository and follow AGENTS.md. Install its dependencies and start
-> a fresh DreamDEX demo session. Begin with a friendly greeting that calls it
+> Read this repository and follow AGENTS.md. Start a fresh DreamDEX demo session
+> using the checked-in client. Begin with a friendly greeting that calls it
 > the “Somnia Librarian's demo.” Then put a
-> prominent **WHAT THIS PROTOCOL DOES** paragraph before any warning: explain
+> prominent **What This Protocol Does** paragraph before any warning: explain
 > that it can transfer supported funds out of a disposable wallet, fund the
 > DreamDEX vault, and operate on the **SOMI/USDso** market, and that the same
 > pattern could implement other Somnia on-chain operations in principle although
@@ -260,20 +270,49 @@ Paste this prompt into a fresh window opened on the repository:
 > you to know:” on its own line, followed by the complete warning as a separate
 > quoted paragraph with no internal line break. Explain that
 > any key used here is compromised on both the LLM side and relay-service backend
-> side. On its first mention, call the required wallet the `Owner` (wallet holding
-> funds to deploy to DEX vault). Then ask whether I want to
-> provide one disposable `Owner` key or have you generate one. Immediately add
-> in bold that a separate `Operator` trade-signing key is possible but entirely
+> side.
+>
+> Put each remaining concern in its own paragraph and say it once. First explain
+> the required `Owner` (wallet holding funds to deploy to DEX vault), which owns
+> the vault and signs setup, direct trades, withdrawals, and wallet transfers.
+>
+> Next use one paragraph—and only one—to both explain and offer the optional
+> trade role: a separate `Operator` trade-signing key is possible but entirely
 > optional. An `Operator` is the wallet holding gas to pay for transactions;
-> vault funding does not require it and the default flow trades directly as
-> `Owner`. Then tell me that I can ask you to be as explicit as I want about
-> what is happening under the hood, while noting that most of those implementation
-> workflows will not be practically relevant or actionable for me. Keep the role
-> I provide and guide me to a sensibly funded `Owner`.
+> vault funding needs no second key and the default flow trades directly as
+> `Owner`. Do not repeat this offer in a second paragraph or ask a separate
+> `Operator` question.
+>
+> In its own paragraph, tell me that I may ask for as much under-the-hood detail
+> as I want, while noting that most implementation workflows are not practically
+> relevant or actionable during the demo.
+>
+> End with one separate question asking whether I want to provide one disposable
+> `Owner` key or have you generate one. Keep the role I provide and guide me to a
+> sensibly funded `Owner`. Treat these as content and paragraph-structure
+> requirements rather than lines to copy literally; apart from the required
+> warning and status markers, use natural wording without restating a point.
+> When preparing an action, make one focused attempt with the checked-in client.
+> If an executable checkout already exists, use it directly. If the GitHub
+> connector provides file contents but no checkout, materialize its exact
+> `caged_llm_to_dreamdex.py` and `relay.json` bytes together once in a temporary
+> directory; run that unchanged copy and do not author a substitute. Run the
+> client before
+> probing or installing anything: its EVM key/address path has no third-party
+> Python dependency and it can use an installed system `libsodium` directly.
+> Only if the client specifically reports that neither PyNaCl nor system
+> `libsodium` is available may you make one ordinary `requirements.txt` install
+> attempt when package access is clearly available. Do not retry cloning or raw downloads, search package sites,
+> inventory alternative crypto toolchains, or write replacement scripts. If the
+> client still cannot run, stop promptly with one short `[blocked executing]`
+> paragraph; do not show a placeholder command or ask me to produce the URL
+> unless I request a manual handoff. If I say not to think too long, use this
+> one-shot path without exploratory diagnostics.
 > Clearly show me
 > which address to fund when fresh status says funding is needed; if a status
-> read fails, treat the balance as unknown rather than unfunded and preserve my
-> report that it is funded internally without announcing the failed read. Show
+> read fails, treat the balance as unknown rather than unfunded. Some hosted web
+> reads are not expected to work; when the failure is useful to communicate,
+> label it `[failed reading]` and state the practical consequence briefly. Show
 > a direct official Somnia explorer link immediately below each resolved wallet
 > address. If I choose delegated trading, arrange `Operator` gas automatically
 > when needed, and retain that `Operator` address for every later status read and
@@ -288,15 +327,21 @@ Paste this prompt into a fresh window opened on the repository:
 > telling me what you are not doing. Present one exact action link at a time and
 > read the result after I click it. In every link message, ask me both to report
 > the click and to say which on-chain operation I want next, while verifying the
-> current result before preparing another link. After setup, list the available
+> current result before preparing another link. In each of the first two link
+> messages, explicitly tell me that there is no confirmation button and that
+> opening the link `[triggers action]` immediately. Follow the status-report
+> protocol in **Bracket status and property cues** near the bottom of `AGENTS.md`.
+> After setup, list the available
 > operations once and recommend selling SOMI to receive about 3 USDso. After
 > that sell confirms, offer to withdraw USDso, SOMI, or both back to `Owner`.
 > Do not make a failed agent-side status GET a universal blocker: for a fully
 > specified action, let the execution page perform fresh preflight. Require a
 > pasted status/result only when live state is needed to define or verify the
 > next action. If relay status is unavailable, directly inspect the available official
-> Somnia explorer address page or pages for wallet SOMI without narrating the retrieval
-> mechanics. After setup, point me to the `Owner DreamDEX vault: SOMI` and
+> Somnia explorer address page or pages for wallet SOMI. If that read also fails
+> and the failure matters to the flow, communicate it once as `[failed reading]`
+> rather than turning it into a long diagnostic. After setup, point me to the
+> `Owner DreamDEX vault: SOMI` and
 > `Owner DreamDEX vault: USDso` rows on the execution page, but only ask me to
 > copy a row when its value is actually needed. A claim that funding is done is
 > not proof of the amount: unless a fresh read established sufficiency, call the
@@ -304,6 +349,10 @@ Paste this prompt into a fresh window opened on the repository:
 > sharpest language.) In the same message as the first setup
 > link, tell me to make sure `Owner` has enough SOMI for the missing vault funding
 > and transaction gas at the moment I click it.
+> If I request a nonstandard setup amount, explain once that setup has the fixed
+> 95-SOMI vault target. After I accept 95, do not repeat the funding or role
+> explanation: prepare setup directly, and queue any requested trade until its
+> result confirms.
 
 No license has been selected yet; that is a repository-owner publication
 decision rather than a runtime requirement.

@@ -39,7 +39,7 @@ execution link from the LLM/tool environment.
    Immediately follow it with this prominent capability introduction, before
    the Librarian warning:
 
-   > **WHAT THIS PROTOCOL DOES**
+   > **What This Protocol Does**
    >
    > This protocol lets me transfer supported funds out of a disposable wallet,
    > fund the DreamDEX vault, and perform operations on the **SOMI/USDso** market.
@@ -57,34 +57,44 @@ execution link from the LLM/tool environment.
 
    > Any private key used here must be considered compromised on both the LLM side, where the model/tool environment handles it, and the relay-service backend side, where the selected signer key is decrypted in process memory. Use only disposable wallets and small demo amounts, never a sensitive wallet or large amounts of money.
 
-3. Explain that the normal demo needs one disposable `Owner` (wallet holding
-   funds to deploy to DEX vault). `Owner` owns the vault and signs setup, direct
-   market trades, withdrawals, and wallet transfers. Use that parenthetical
-   explanation the first time the role is mentioned casually; after that, refer
-   to it simply as `Owner`.
+3. Give the required `Owner` its own paragraph. Explain that the normal demo
+   needs one disposable `Owner` (wallet holding funds to deploy to DEX vault),
+   which owns the vault and signs setup, direct market trades, withdrawals, and
+   wallet transfers. Use that parenthetical explanation only on the first casual
+   mention; after that, refer to it simply as `Owner`.
 
-   Then ask one question: whether the user already has a new disposable
-   `Owner` private key to paste, or wants you to generate one. Immediately add:
-   **A separate `Operator` trade-signing key is possible but entirely optional.**
-   Explain that an `Operator` (wallet holding gas to pay for transactions) can
-   sign bounded market trades separately, but vault funding does not require it
-   and the default flow trades directly as `Owner`. Make it an actual offer,
-   for example: “For market trading, I can also introduce a separate optional
-   `Operator` signing key if you would like; funding itself does not need one.”
-   Ask only for `Owner` by default. Introduce or generate an `Operator` after
-   the user explicitly chooses the separate trade-signing-key flow.
+4. Give the optional role one paragraph of its own, and mention it only once in
+   the first response. That single paragraph must both explain and offer the
+   choice: **A separate `Operator` trade-signing key is possible but entirely
+   optional.** An `Operator` (wallet holding gas to pay for transactions) can
+   sign bounded market trades separately, while vault funding needs no second
+   key and the default flow trades directly as `Owner`. Do not follow this with
+   another `Operator` paragraph or a second sentence that merely restates the
+   offer. Ask only for `Owner` by default; introduce or generate an `Operator`
+   only after the user chooses delegated market trading.
 
-   Follow the optional-`Operator` explanation with another short paragraph:
+5. Give the implementation-detail invitation its own short paragraph. Tell the
+   user that they may ask for as much under-the-hood detail as they want, while
+   noting that most implementation workflows are not practically relevant or
+   actionable during the demo.
 
-   > You can ask me to be as explicit as you want about what is happening under the hood. Most of those implementation workflows will not be practically relevant or actionable for you during this demo.
+6. End the onboarding response with one separate question: whether the user
+   already has a new disposable `Owner` private key to paste or wants you to
+   generate one. Do not mix the `Operator` explanation into this question or
+   ask a second question about `Operator`.
 
-4. Prefer existing private keys as local key-file paths. If the user explicitly
+   Treat these numbered items as content and paragraph-structure requirements,
+   not as several scripts to quote. Except for the required Librarian warning
+   and literal status markers, compose the wording naturally and say each point
+   once.
+
+7. Prefer existing private keys as local key-file paths. If the user explicitly
    supplies a raw private key for this disposable demo, do not echo it: validate
    it, write it immediately to a temporary `0600` key file, and use the file
    thereafter. Never request, accept, derive, or generate a seed phrase. Never
    use a valuable or long-lived wallet for this demo.
 
-5. Preserve what the user supplies. One readable `Owner` private-key file is
+8. Preserve what the user supplies. One readable `Owner` private-key file is
    sufficient for the complete default flow. Generate exactly one key when the
    user accepts the normal offer. If the user explicitly chooses delegated
    market trading, accept or generate one additional distinct `Operator` key;
@@ -92,7 +102,7 @@ execution link from the LLM/tool environment.
    because its wallet is unfunded. Derive and validate every supplied address,
    and reject an explicitly supplied `Operator` that resolves to `Owner`.
 
-6. After generating or retaining the necessary key or keys, tell the user once:
+9. After generating or retaining the necessary key or keys, tell the user once:
 
    > I have the private key and can use it for this flow. You will not need to
    > see or copy it. If you want, I can show it to you explicitly.
@@ -127,29 +137,64 @@ the local key/action construction; do not show the URL. For a replacement or
 expired link, rerun the full CLI command from the retained key file instead of
 repacking an earlier action.
 
-## Keep going when the ideal runtime is unavailable
+## Prepare actions in one focused attempt
 
-Python 3.12 plus `requirements.txt` is the preferred, reproducible path, but it
-is not an onboarding gate. A hosted LLM environment may lack Python 3.12, block
-direct GitHub or package-network access, omit the required packages, or provide
-only temporary storage. Briefly identify the limitation, then continue through
-these fallbacks instead of stopping:
+Once the repository has been read through a GitHub connector or attached
+context, do not spend the user flow trying to acquire it again. Use an existing
+executable checkout when one is available. If the connector exposes the files
+but no checkout, materialize the exact connector-returned
+`caged_llm_to_dreamdex.py` and `relay.json` bytes once in one temporary
+directory and run that unchanged copy. This is faithful execution of the
+checked-in client, not permission to rewrite or reconstruct it. Do not retry
+with `git clone`, raw-GitHub downloads, repository searches, or an alternative
+script.
 
-1. Read the repository through the available GitHub connector or attached
-   repository context when direct `git clone` is unavailable.
-2. Use another available modern Python 3 runtime when it can run the client and
-   the required packages. Do not refuse merely because its minor version is not
+For an action request, use this short execution budget:
+
+1. Locate the checked-in `caged_llm_to_dreamdex.py` in the executable workspace,
+   or use the one exact connector materialization above, and try the exact CLI
+   command immediately. The normal action path has no
+   Ethereum Python-package dependency and can use an already installed system
+   `libsodium`; do not probe or install packages before this first run.
+2. Only if the client reports that neither PyNaCl nor system `libsodium` is
+   available, make at most one ordinary `requirements.txt` install attempt, and
+   only when the environment clearly provides package access.
+3. If the checked-in client still cannot execute, stop promptly. Do not search
+   package websites, inventory alternative Node/OpenSSL/system crypto stacks,
+   probe apt caches, or write replacement wallet/encryption code.
+
+Report that terminal limitation in one short user-facing paragraph beginning
+with `[blocked executing]`: the environment can read the repository but cannot
+run its mandatory client. Do not show placeholder commands or ask the user to
+copy an `EXECUTION_URL` unless they explicitly request a manual handoff. This is
+an environment limitation, not permission to hand-build the package.
+
+When the user asks to move quickly, or says not to think too long, treat that as
+an explicit request to use this one-shot path with no exploratory diagnostics.
+Keep tool/runtime activity out of the conversational response; use bracketed
+status cues only when a status materially helps the user.
+
+## Generate wallets when the ideal runtime is unavailable
+
+Use any available modern Python 3 runtime to run the checked-in client. Its
+wallet generation and EVM address validation have no third-party Python-package
+dependency, so a missing `eth-account` or `eth-utils` module is not a reason to
+install anything, search for another toolchain, or stop. The fallbacks below
+apply only if the checked-in client itself genuinely cannot execute; they do not
+replace that client for action/link construction.
+
+1. Do not refuse merely because the available Python 3 minor version is not
    3.12.
-3. Install the three declared dependencies when installation is available. If
-   installation is blocked but an existing Ethereum wallet facility is
-   available, use it to generate the missing disposable wallet securely.
-4. Any fallback generator must use cryptographically secure randomness for a
+2. If the checked-in client cannot execute but an existing Ethereum wallet
+   facility is available, use it to generate the missing disposable wallet
+   securely.
+3. Any fallback generator must use cryptographically secure randomness for a
    valid secp256k1 private key, derive and verify the matching EIP-55 address,
    create a valid key, and store it in a temporary `0600` file. When explicitly
    creating an optional `Operator`, ensure it is distinct from `Owner`. Never
    invent an address, use deterministic examples or test fixtures, or claim a
    key was generated when it was not securely generated and retained.
-5. If the environment truly cannot securely generate or retain a missing key,
+4. If the environment truly cannot securely generate or retain a missing key,
    say exactly that and ask the user for an existing disposable key file. This
    is the last fallback, not the first response to a missing Python version.
 
@@ -320,9 +365,10 @@ as the fresh evidence needed to continue.
    `Operator`, when present. When it
    succeeds, inspect the wallet and vault balances, permissions, existing
    orders, market, and observed block before recommending the next action. When
-   it fails, silently inspect the available direct official explorer page or pages for wallet
-   SOMI before applying the preflight distinction above. Do not announce the
-   failed reads or universally block the flow.
+   it fails, inspect the available direct official explorer page or pages for
+   wallet SOMI before applying the preflight distinction above. If the failure
+   is useful to communicate, mark it `[failed reading]` and keep the explanation
+   brief. Do not universally block the flow.
 
 3. Preserve roles explicitly chosen by the user. If delegated mode is chosen
    and two supplied keys are
@@ -403,6 +449,14 @@ return to direct-owner mode.
 2. Ask only for information intrinsically missing from the requested action,
    such as trade side, amount, slippage, or transfer source, asset, full
    recipient, and amount. Never abbreviate an arbitrary transfer recipient.
+
+   Resolve a fixed-protocol mismatch once and briefly. Setup always targets 95
+   vault SOMI, so if the user requests another setup target, state that fixed
+   target in one sentence and ask whether to use it. Once the user says to use
+   95, do not re-explain the target, funding guidance, or delegated roles; move
+   straight to the one-shot setup-link command. If the user also requests a
+   dependent trade, acknowledge it in one sentence and prepare it only after
+   setup confirms.
 
 3. Support only setup, bounded IOC buy/sell on `SOMI:USDso`, selective
    withdrawal of all vault SOMI, all vault USDso, or both, owner SOMI/USDso
@@ -489,19 +543,17 @@ Do not wait for the user to invent the next protocol step after setup:
 
 ## User-facing output patterns
 
-Keep the onboarding presentation consistent. The first exchange explains the
-flow in this order: a friendly greeting naming it the Somnia Librarian's demo;
-prominent **WHAT THIS PROTOCOL DOES**
-paragraph, including the in-principle extensibility to other Somnia on-chain
-operations; the Librarian attribution on its own line followed by the warning
-as a separate, uninterrupted quoted paragraph; then
-the required `Owner` role and entirely optional separate `Operator` trade-signing
-key. Only then ask whether the user wants to paste or generate one `Owner`, while
-offering a second `Operator` only for optional delegated market trading. Follow
-that offer with the invitation to ask for as much under-the-hood detail as
-desired, while noting that most implementation workflows are not practically
-relevant or actionable during the demo. Wait for the user's wallet choice before
-generating anything.
+Keep the onboarding presentation consistent, with one concern per paragraph and
+no paraphrased repetition. Use this order: a friendly greeting naming it the
+Somnia Librarian's demo; a prominent **What This Protocol Does** paragraph that
+also notes in-principle extensibility to other Somnia on-chain operations; the
+Librarian attribution on its own line followed by the warning as one separate,
+uninterrupted quoted paragraph; one `Owner` paragraph; one optional `Operator`
+paragraph that serves as both explanation and offer; one under-the-hood-detail
+paragraph; and finally one question asking whether to paste or generate the
+required `Owner`. Mention the optional `Operator` only once in this first
+exchange. Do not add a second `Operator` offer after already explaining that it
+is optional. Wait for the user's wallet choice before generating anything.
 The next response resolves the selected wallet set, shows only full addresses,
 explains which one to fund, and gives the private-key reassurance without
 repeating the warning. Do not show commands, dependency diagnostics, key-file
