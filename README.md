@@ -203,13 +203,29 @@ python caged_llm_to_dreamdex.py result 0123456789abcdef0123456789abcdef
 
 `status` and `result` use public GET requests. If a status GET is unavailable,
 the client prints the exact relay URL plus direct official Somnia explorer URLs
-for the selected wallet set. Open those URLs directly; never use web search to find them or
-investigate proxy, workflow, environment, RPC, or mirror workarounds. The
+for the selected wallet set. Hosted ChatGPT environments are known to sometimes
+fail these reads even while their GitHub connector works. Make one status
+attempt; optionally try the exact relay URL once when another direct-read tool
+may behave differently, then stop. Never use web search, mounted-file searches,
+or proxy, workflow, environment, RPC, or mirror investigation as workarounds. The
 explorer fallback can establish wallet SOMI—and visible wallet tokens such as
-USDso—but not internal DreamDEX vault balances, permissions, orders, or book
-state. A hosted tool may reject a parameterized status URL even while the relay
-is healthy. Never infer that a wallet is unfunded from a failed read. Link
+USDso—but open it automatically only when that wallet value is genuinely needed
+to define the action or the user asks. It cannot establish internal DreamDEX
+vault balances, permissions, orders, or book state. A hosted tool may reject a
+parameterized status URL even while the relay is healthy. Never infer that a
+wallet is unfunded from a failed read. Link
 generation is offline and never sends the encrypted package to the relay.
+
+An LLM following this workflow should prepare its reusable client workspace
+near the beginning of the session. The normal flow needs the checked-in
+`caged_llm_to_dreamdex.py` and public `relay.json`; it should resolve an existing
+checkout or obtain those two exact files once, keep them together, and reuse
+that same copy for wallet handling, status, action links, and result checks.
+This is an efficiency suggestion for the conversation, not an early
+authorization or a substitute for validation: it sends no key and does not
+remove any client check or execution-page preflight. `requirements.txt` is only
+needed if the client itself reports the specific optional dependency failure
+described below.
 
 When resolved addresses are presented to the user, always put each
 direct official Somnia explorer link immediately below its address. The links
@@ -226,6 +242,16 @@ practical consequence briefly, and avoid a long list of attempts unless the
 user asks for it or cannot proceed without the details. (Note to LLM: This also
 slows down the conversation flow.)
 A more elaborate version of the protocol might implement the read with MCP.
+
+For standard setup, treat returning to the useful user flow as a suggestion:
+explain once that the execution page will check live balances before
+broadcasting, ask the user to make sure `Owner` has enough SOMI for the missing
+vault funding and gas, and ask whether they would like the fixed 95-SOMI setup
+prepared. This is solely a procedure for a smoother conversation; it does not
+bypass validation or weaken a security boundary. The checked-in client
+validation and execution page's fresh live preflight remain mandatory. If the
+user accepts the suggestion, proceed without unrelated status/explorer attempts
+or more funding explanation.
 
 An agent-side status GET is useful but is not a universal prerequisite for link
 generation. The execution page always performs a fresh chain read and preflight
@@ -292,6 +318,16 @@ Paste this prompt into a fresh window opened on the repository:
 > sensibly funded `Owner`. Treat these as content and paragraph-structure
 > requirements rather than lines to copy literally; apart from the required
 > warning and status markers, use natural wording without restating a point.
+> Near the start of the session, silently prepare the public runtime files that
+> later steps will need. Reuse an existing executable checkout when available;
+> otherwise obtain the exact checked-in `caged_llm_to_dreamdex.py` and
+> `relay.json` once through the GitHub connector, keep them together in one
+> temporary directory, and reuse that same copy for wallet validation, status,
+> action links, and result checks. Do not fetch or reconstruct them again for
+> each action. This early preparation is only a conversation-flow optimization:
+> it does not authorize anything, transmit a key, or replace client validation
+> or the execution page's live preflight. Fetch `requirements.txt` only if the
+> checked-in client produces the specific dependency error described next.
 > When preparing an action, make one focused attempt with the checked-in client.
 > If an executable checkout already exists, use it directly. If the GitHub
 > connector provides file contents but no checkout, materialize its exact
@@ -308,11 +344,18 @@ Paste this prompt into a fresh window opened on the repository:
 > paragraph; do not show a placeholder command or ask me to produce the URL
 > unless I request a manual handoff. If I say not to think too long, use this
 > one-shot path without exploratory diagnostics.
+> If connector content is encoded, decode those exact bytes once; do not copy
+> crypto functions into an interactive cell, manually derive addresses, or
+> search mounted directories after the files have been supplied.
 > Clearly show me
 > which address to fund when fresh status says funding is needed; if a status
-> read fails, treat the balance as unknown rather than unfunded. Some hosted web
-> reads are not expected to work; when the failure is useful to communicate,
-> label it `[failed reading]` and state the practical consequence briefly. Show
+> read fails, treat the balance as unknown rather than unfunded. Expect that
+> hosted ChatGPT may be unable to reach `somnia.run` or the explorer even while
+> its GitHub connector works. Make one status attempt and at most one direct
+> attempt at the exact relay URL, then stop: do not search the web, inspect
+> mounted files, try alternate RPCs, or automatically inspect explorers. When
+> the failure is useful to communicate, label it `[failed reading]` and state
+> the practical consequence briefly. Show
 > a direct official Somnia explorer link immediately below each resolved wallet
 > address. If I choose delegated trading, arrange `Operator` gas automatically
 > when needed, and retain that `Operator` address for every later status read and
@@ -337,10 +380,16 @@ Paste this prompt into a fresh window opened on the repository:
 > Do not make a failed agent-side status GET a universal blocker: for a fully
 > specified action, let the execution page perform fresh preflight. Require a
 > pasted status/result only when live state is needed to define or verify the
-> next action. If relay status is unavailable, directly inspect the available official
-> Somnia explorer address page or pages for wallet SOMI. If that read also fails
-> and the failure matters to the flow, communicate it once as `[failed reading]`
-> rather than turning it into a long diagnostic. After setup, point me to the
+> next action. Open an explorer automatically only when a wallet balance is
+> genuinely needed to define the next action or I ask you to verify it. For the
+> standard setup, if status is unavailable, tell me once that the execution page
+> will check live balances, ask me to make sure `Owner` has enough SOMI for the
+> missing vault funding and gas, and suggest preparing the fixed 95-SOMI setup.
+> Make clear that this is a conversation-flow suggestion, not a security bypass:
+> checked-in client validation and the execution page's fresh live preflight
+> remain mandatory. If I accept the suggestion, proceed without another
+> unrelated read or funding discussion.
+> After setup, point me to the
 > `Owner DreamDEX vault: SOMI` and
 > `Owner DreamDEX vault: USDso` rows on the execution page, but only ask me to
 > copy a row when its value is actually needed. A claim that funding is done is

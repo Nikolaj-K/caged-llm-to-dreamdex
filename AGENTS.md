@@ -139,6 +139,19 @@ repacking an earlier action.
 
 ## Prepare actions in one focused attempt
 
+Bootstrap the reusable client workspace near the start of the session, after
+reading these instructions and before the conversation reaches its first action
+request. The only public runtime files needed for the normal flow are
+`caged_llm_to_dreamdex.py` and `relay.json`. Resolve an existing executable
+checkout or materialize those two exact connector-returned files once, keep the
+same directory available for the rest of the session, and reuse it for wallet
+generation or validation, status reads, every action link, and result checks.
+Do this preparatory work silently while introducing the flow or waiting for the
+user's wallet choice. It does not validate a balance, authorize an action, or
+transmit a private key, and it does not replace any later client validation or
+execution-page preflight. Fetch `requirements.txt` only if the client's own
+runtime error makes the single conditional install attempt below necessary.
+
 Once the repository has been read through a GitHub connector or attached
 context, do not spend the user flow trying to acquire it again. Use an existing
 executable checkout when one is available. If the connector exposes the files
@@ -149,11 +162,18 @@ checked-in client, not permission to rewrite or reconstruct it. Do not retry
 with `git clone`, raw-GitHub downloads, repository searches, or an alternative
 script.
 
+If the connector returns encoded file content, decode those exact bytes once.
+Do not inspect source chunks in order to copy cryptographic functions into an
+interactive cell, manually derive the wallets, or search mounted directories
+after the connector already supplied the files. The checked-in client performs
+the validation; the LLM must not recreate that validation itself.
+
 For an action request, use this short execution budget:
 
 1. Locate the checked-in `caged_llm_to_dreamdex.py` in the executable workspace,
-   or use the one exact connector materialization above, and try the exact CLI
-   command immediately. The normal action path has no
+   or reuse the one exact connector materialization prepared near the start of
+   the session, and try the exact CLI command immediately. Do not fetch either
+   runtime file again for a later action. The normal action path has no
    Ethereum Python-package dependency and can use an already installed system
    `libsodium`; do not probe or install packages before this first run.
 2. Only if the client reports that neither PyNaCl nor system `libsodium` is
@@ -209,9 +229,12 @@ The status-report protocol used throughout these instructions is defined in
 ## Read relay state directly; never search for it
 
 Live `status` and `result` reads are exact public GETs, not web-research tasks.
-They contain public addresses and state but no private keys. Run the client's
-`status` or `result` command first. If its direct GET fails, it prints the exact
-public read URL.
+They contain public addresses and state but no private keys. Hosted ChatGPT
+environments are known to sometimes fail DNS or direct opens for `somnia.run`
+and the Somnia explorer even while their GitHub connector works. Treat that as
+an expected environment limitation, not as an invitation to diagnose the
+network. Run the client's `status` or `result` command once. If its direct GET
+fails, it prints the exact public read URL.
 
 Open that exact URL once with an available direct open, fetch, browse, or read
 tool. Never submit a search-engine query for a status or result URL, and never
@@ -226,12 +249,13 @@ exact printed public read URLs only.
 
 (Note to LLM: This has been tested and found slow down the conversation flow with no benefit. You can go to other webpages, but it won't tell you more than what's in the python scripts.)
 
-For `status`, if both the client GET and exact relay status URL fail, directly
-open the printed official Somnia explorer address URL or URLs. This is an allowed
-read fallback, not web research: do not search for the addresses or visit
-unrelated sites. Prioritize the native SOMI balance because it establishes
-whether `Owner` has setup value and, in delegated mode, whether `Operator` already has gas. The
-explorer's token view may also establish wallet USDso.
+For ordinary onboarding or a fully specified action, do not automatically open
+the explorer after the status read fails. Show the explorer links to the user,
+but try an explorer read only when a wallet-level balance is genuinely needed
+to define the next action or the user asks you to verify it. Never search for
+the addresses, inspect mounted files, or visit unrelated sites as a workaround.
+When explorer evidence is actually needed, prioritize native SOMI; its token
+view may also establish wallet USDso.
 
 Always make the same explorer pages available to the user as ordinary wallet
 links, whether or not an automated read succeeds. Immediately after displaying
@@ -256,8 +280,10 @@ tools reject parameterized public URLs even when the relay itself is healthy;
 that rejection says nothing about either wallet's balance.
 
 Some hosted web reads are not expected to work even when the relay and wallets
-are healthy. Try the client read, exact relay URL, and exact explorer pages in
-that order. If a read fails and you communicate that result, label it
+are healthy. Make one client read attempt and, only if an already available
+direct-read tool may behave differently, at most one attempt at the exact relay
+URL. Do not then try web search, source search, mounted-file search, alternate
+RPCs, or automatic explorer reads. If a read fails and you communicate that result, label it
 `[failed reading]`, state the practical consequence briefly, and continue with
 an allowed fallback or execution-page preflight when possible. A compact
 example is: “`[failed reading]` I could not verify the wallet balance here; the
@@ -282,6 +308,19 @@ failed. Frame the next step operationally:
 “Before setup, make sure `Owner` has enough SOMI for the intended demo.” Do not
 make the user paste status merely to prepare an otherwise fully specified
 action; follow the preflight rules below.
+
+For the normal setup flow, prefer suggesting a return to the useful user flow
+over starting a diagnostic detour. Offer this concise transition, adapted to
+the selected roles:
+“`[failed reading]` This LLM environment could not read the live balances. We
+can still continue because the execution page checks them before broadcasting.
+Please make sure `Owner` has enough SOMI for the missing vault funding and gas.
+Would you like me to prepare the 95-SOMI vault setup?” This is a user-experience
+suggestion, not permission to bypass validation or weaken a security boundary.
+The checked-in client validation and execution page's fresh live preflight
+remain mandatory. If the user accepts the suggestion, proceed to the validated
+setup-link step without unrelated status, explorer, web-search, or filesystem
+diagnostics and without re-explaining funding first.
 
 When explaining why you cannot inspect a balance or why a read failed, explain
 the actual boundary clearly rather than saying that the address or relay is
@@ -361,14 +400,14 @@ as the fresh evidence needed to continue.
    funds at. Do not expose temporary key-file paths in the normal user-facing
    flow.
 
-2. Attempt fresh public `status` automatically for `Owner` and the optional
+2. Attempt fresh public `status` once for `Owner` and the optional
    `Operator`, when present. When it
    succeeds, inspect the wallet and vault balances, permissions, existing
    orders, market, and observed block before recommending the next action. When
-   it fails, inspect the available direct official explorer page or pages for
-   wallet SOMI before applying the preflight distinction above. If the failure
-   is useful to communicate, mark it `[failed reading]` and keep the explanation
-   brief. Do not universally block the flow.
+   it fails, apply the user-flow suggestion above instead of automatically
+   inspecting explorers or starting diagnostics. If the failure is useful to
+   communicate, mark it `[failed reading]` and keep the explanation brief. Do
+   not universally block the flow.
 
 3. Preserve roles explicitly chosen by the user. If delegated mode is chosen
    and two supplied keys are
@@ -403,8 +442,7 @@ as the fresh evidence needed to continue.
    you can swap some on [OpenSea](https://opensea.io/swap?toChain=somnia&toAddress=0x0000000000000000000000000000000000000000).” Keep visible link labels short
    and descriptive; do not print the full destination URL in ordinary chat.
 
-6. After the user reports funding, query fresh `status` automatically, then
-   inspect the direct official explorer pages if needed.
+6. After the user reports funding, query fresh `status` once.
    Use the single manual-link fallback only if a live wallet SOMI value is truly
    needed to choose the action. For the normal target-state setup, proceed to
    its execution link and let the relay page perform fresh preflight; do not

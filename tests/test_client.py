@@ -523,7 +523,7 @@ def test_agent_instructions_pin_somnia_identity_and_fallback_voice() -> None:
         "It is not\nSolana",
         "**Somnia/DreamDEX status**",
         "I need the user to paste",
-        "Prioritize the native SOMI balance",
+        "When explorer evidence is actually needed, prioritize native SOMI",
         "Explorer evidence is wallet-level only",
             "Some hosted web reads are not expected to work",
             "`[failed reading]`",
@@ -532,6 +532,68 @@ def test_agent_instructions_pin_somnia_identity_and_fallback_voice() -> None:
     ):
         assert phrase in agents
     assert "It is not Solana" in readme
+
+
+def test_agent_instructions_suggest_forward_motion_without_bypassing_checks() -> None:
+    agents = " ".join((ROOT / "AGENTS.md").read_text(encoding="utf-8").split())
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    prompt = " ".join(
+        readme.split("## Start this in a new ChatGPT/Codex window", 1)[1]
+        .replace(">", " ")
+        .split()
+    )
+
+    for phrase in (
+        "Some hosted web reads are not expected to work",
+        "Make one client read attempt",
+        "at most one attempt at the exact relay URL",
+        "Do not then try web search, source search, mounted-file search",
+        "user-experience suggestion",
+        "not permission to bypass validation or weaken a security boundary",
+        "checked-in client validation and execution page's fresh live preflight remain mandatory",
+        "Do not inspect source chunks",
+        "manually derive the wallets",
+        "search mounted directories",
+    ):
+        assert phrase in agents
+
+    for phrase in (
+        "Expect that hosted ChatGPT may be unable to reach",
+        "Make one status attempt and at most one direct attempt",
+        "do not search the web, inspect mounted files",
+        "conversation-flow suggestion, not a security bypass",
+        "checked-in client validation and the execution page's fresh live preflight remain mandatory",
+        "If I accept the suggestion",
+    ):
+        assert phrase in prompt
+
+
+def test_agent_bootstraps_and_reuses_public_runtime_files_early() -> None:
+    agents = " ".join((ROOT / "AGENTS.md").read_text(encoding="utf-8").split())
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    prompt = " ".join(
+        readme.split("## Start this in a new ChatGPT/Codex window", 1)[1]
+        .replace(">", " ")
+        .split()
+    )
+
+    for phrase in (
+        "Bootstrap the reusable client workspace near the start of the session",
+        "The only public runtime files needed for the normal flow are `caged_llm_to_dreamdex.py` and `relay.json`",
+        "reuse it for wallet generation or validation, status reads, every action link, and result checks",
+        "does not validate a balance, authorize an action, or transmit a private key",
+        "Do not fetch either runtime file again for a later action",
+    ):
+        assert phrase in agents
+
+    for phrase in (
+        "Near the start of the session, silently prepare the public runtime files",
+        "obtain the exact checked-in `caged_llm_to_dreamdex.py` and `relay.json` once",
+        "reuse that same copy for wallet validation, status, action links, and result checks",
+        "does not authorize anything, transmit a key, or replace client validation",
+        "Fetch `requirements.txt` only if the checked-in client produces the specific dependency error",
+    ):
+        assert phrase in prompt
 
 
 def test_onboarding_uses_one_paragraph_per_concern_without_operator_repetition() -> None:
