@@ -14,6 +14,9 @@ sells on `SOMI:USDso`, selective withdrawal of vault SOMI, USDso, or both, and
 constrained owner/operator wallet transfers. It does not support limit orders,
 arbitrary contracts or calldata, other markets, seed phrases, custody,
 strategies, or autonomous trading.
+The same user-click authorization architecture could implement other Somnia
+on-chain operations in principle; this public demo intentionally keeps a small,
+fixed operation set.
 
 Chrome is the currently supported execution browser. Opening a generated link
 there executes the described action immediately. There is no confirmation
@@ -47,6 +50,10 @@ not print the private key. Key files have mode `0600`; reveal one only
 when explicitly requested, and never put a private key in a command argument or
 URL. A disposable key supplied to the operating LLM is considered compromised
 by that conversation and by the relay backend.
+It also prints `OWNER_KEY_VALIDATED=true` and
+`OWNER_ADDRESS_MATCH_CONFIRMED=true`. Do not proceed if either self-check is
+missing. Every action command similarly prints signer/package validation
+markers before its execution URL.
 
 For a wholly fresh setup, roughly 99 owner SOMI is a useful recommendation: the
 standard target is 95 SOMI in the DreamDEX vault, with room for gas. It is not
@@ -243,18 +250,21 @@ operations `fund`, `trade`, `withdraw`, and `transfer`.
 Paste this prompt into a fresh window opened on the repository:
 
 > Read this repository and follow AGENTS.md. Install its dependencies and start
-> a fresh DreamDEX demo session. On its first mention, call it the `Owner`
-> (wallet holding funds to deploy to DEX vault). Before asking me to paste a key or
-> offering to generate one, write “The Somnia Librarian wants you to know:”
-> outside a blockquote, then quote the warning beginning with “Any private key”
-> and explain that any key used here must be considered compromised on both the LLM
-> side and the relay-service backend side. Next explain that the protocol can
-> transfer supported funds out of the wallet, fund the DreamDEX vault, and
-> perform operations on the **SOMI/USDso** market. Then ask whether I want to
+> a fresh DreamDEX demo session. Begin with a friendly greeting. Then put a
+> prominent **WHAT THIS PROTOCOL DOES** paragraph before any warning: explain
+> that it can transfer supported funds out of a disposable wallet, fund the
+> DreamDEX vault, and operate on the **SOMI/USDso** market, and that the same
+> pattern could implement other Somnia on-chain operations in principle although
+> this demo exposes only its fixed action set. Next give the complete Somnia
+> Librarian warning as one paragraph with no internal line break. Explain that
+> any key used here is compromised on both the LLM side and relay-service backend
+> side. On its first mention, call the required wallet the `Owner` (wallet holding
+> funds to deploy to DEX vault). Then ask whether I want to
 > provide one disposable `Owner` key or have you generate one. Immediately add
-> that market trading can optionally use a second `Operator` (wallet holding gas
-> to pay for transactions), although vault funding does not require it and the
-> default flow trades directly as `Owner`. Do not use “zero, one, or two”
+> in bold that a separate `Operator` trade-signing key is possible but entirely
+> optional. An `Operator` is the wallet holding gas to pay for transactions;
+> vault funding does not require it and the default flow trades directly as
+> `Owner`. Do not use “zero, one, or two”
 > wording. Keep the role I provide and guide me to a sensibly funded `Owner`.
 > Clearly show me
 > which address to fund when fresh status says funding is needed; if a status
@@ -266,7 +276,11 @@ Paste this prompt into a fresh window opened on the repository:
 > action until a confirmed delegated both-assets cleanup revokes its permissions;
 > never silently fall back to direct-owner mode while those permissions may remain live. Then
 > use ordinary operational language rather than implementation details or
-> internal parameter names. Follow safety constraints silently instead of
+> internal parameter names. Use the checked-in CLI—not custom JSON or encryption—
+> for wallet and action construction. Do not present a link unless the CLI exits
+> successfully, its wallet/address self-checks passed, and it prints
+> `SIGNER_KEY_VALIDATED=true`, `ACTION_PACKAGE_VALIDATED=true`, and
+> `OPENING_THIS_LINK_EXECUTES=true` with the expected full signer address. Follow safety constraints silently instead of
 > telling me what you are not doing. Present one exact action link at a time and
 > read the result after I click it. In every link message, ask me both to report
 > the click and to say which on-chain operation I want next, while verifying the
@@ -280,7 +294,11 @@ Paste this prompt into a fresh window opened on the repository:
 > Somnia explorer address page or pages for wallet SOMI without narrating the retrieval
 > mechanics. After setup, point me to the `Owner DreamDEX vault: SOMI` and
 > `Owner DreamDEX vault: USDso` rows on the execution page, but only ask me to
-> copy a row when its value is actually needed.
+> copy a row when its value is actually needed. A claim that funding is done is
+> not proof of the amount: unless a fresh read established sufficiency, call the
+> setup action “prepared,” not “ready.” In the same message as the first setup
+> link, tell me to make sure `Owner` has enough SOMI for the missing vault funding
+> and transaction gas at the moment I click it.
 
 No license has been selected yet; that is a repository-owner publication
 decision rather than a runtime requirement.

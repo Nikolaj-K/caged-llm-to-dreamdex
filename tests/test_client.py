@@ -68,7 +68,12 @@ def test_generate_wallet_creates_one_private_file_without_printing_key(
     key_path = Path(values[f"{label}_KEY_FILE"])
     private_key = key_path.read_text(encoding="ascii").strip()
 
-    assert set(values) == {label, f"{label}_KEY_FILE"}
+    assert set(values) == {
+        label, f"{label}_KEY_FILE", f"{label}_KEY_VALIDATED",
+        f"{label}_ADDRESS_MATCH_CONFIRMED",
+    }
+    assert values[f"{label}_KEY_VALIDATED"] == "true"
+    assert values[f"{label}_ADDRESS_MATCH_CONFIRMED"] == "true"
     assert client.derive_address(private_key) == values[label]
     assert stat.S_IMODE(directory.stat().st_mode) == 0o700
     assert stat.S_IMODE(key_path.stat().st_mode) == 0o600
@@ -344,7 +349,46 @@ def test_every_link_form_encrypts_exactly_one_correct_signer_key(
     assert other_key.encode("ascii") not in plaintext
     assert selected_key not in stdout + stderr
     assert other_key not in stdout + stderr
+    output = dict(line.split("=", 1) for line in stdout.splitlines())
+    assert output["SIGNER_ROLE"] == signer_role
+    assert output["SIGNER_ADDRESS"] == action[signer_role]
+    assert output["SIGNER_KEY_VALIDATED"] == "true"
+    assert output["ACTION_PACKAGE_VALIDATED"] == "true"
     assert "OPENING_THIS_LINK_EXECUTES=true" in stdout
+
+
+def test_execution_url_refuses_a_hand_built_malformed_or_inconsistent_action(
+    wallets: dict[str, object], relay_key: PrivateKey,
+) -> None:
+    owner = str(wallets["owner"])
+    action = client.make_action(
+        "fund", owner, owner, "owner", str(wallets["owner_key"]),
+        {"operator_gas_policy": "top_up_to_target"}, now=1_000,
+        intent_id="ab" * 16,
+    )
+    config = {
+        "base_url": "https://relay.example.invalid", "key_id": "test-relay",
+        "public_key_b64": client.b64url_encode(bytes(relay_key.public_key)),
+    }
+    malformed = json.loads(json.dumps(action))
+    malformed["signer"]["private_key"] = "0xnot-a-key"
+    with pytest.raises(client.ClientError, match="selected signer private key"):
+        client.execution_url(malformed, config)
+
+    inconsistent = json.loads(json.dumps(action))
+    inconsistent["signer"]["private_key"] = str(wallets["operator_key"])
+    with pytest.raises(client.ClientError, match="does not match"):
+        client.execution_url(inconsistent, config)
+
+
+def test_fund_link_prints_click_time_funding_precondition(
+    wallets: dict[str, object], relay_key: PrivateKey, capsys,
+) -> None:
+    stdout, _ = invoke(capsys, relay_key, [
+        "fund-link", "--owner-key-file", str(wallets["owner_path"]),
+    ])
+    assert "At click time" in stdout
+    assert "missing setup value and worst-case gas" in stdout
 
 
 def test_status_and_result_fallback_urls_are_read_only_and_offline(

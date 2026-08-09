@@ -94,17 +94,23 @@ def read_private_key(path_value: str) -> str:
         value = path.read_text(encoding="ascii").strip()
     except (OSError, UnicodeError) as exc:
         raise ClientError(f"cannot read private-key file: {path}") from exc
-    if not PRIVATE_KEY_RE.fullmatch(value):
-        raise ClientError("private-key file must contain canonical 0x plus 64 lowercase hex characters")
+    return checked_private_key(value, source="private-key file")
+
+
+def checked_private_key(value: Any, *, source: str = "private key") -> str:
+    if not isinstance(value, str) or not PRIVATE_KEY_RE.fullmatch(value):
+        raise ClientError(
+            f"{source} must contain canonical 0x plus 64 lowercase hex characters"
+        )
     try:
         Account.from_key(value)
     except Exception as exc:
-        raise ClientError("private-key file does not contain a valid EVM private key") from exc
+        raise ClientError(f"{source} is not a valid EVM private key") from exc
     return value
 
 
 def derive_address(private_key: str) -> str:
-    return Account.from_key(private_key).address
+    return Account.from_key(checked_private_key(private_key)).address
 
 
 def generate_private_key(randbelow=secrets.randbelow) -> str:
@@ -165,8 +171,8 @@ def generate_wallet(
     return derive_address(private_key), path
 
 
-def checked_address(value: str) -> str:
-    if not ADDRESS_RE.fullmatch(value):
+def checked_address(value: Any) -> str:
+    if not isinstance(value, str) or not ADDRESS_RE.fullmatch(value):
         raise ClientError("address must be 0x plus 40 hex characters")
     return to_checksum_address(value)
 
@@ -280,6 +286,7 @@ def make_action(
     if operation not in LIFETIMES:
         raise ClientError("unsupported operation")
     owner, operator = checked_pair(owner, operator)
+    signer_key = checked_private_key(signer_key, source="selected signer private key")
     delegated = owner != operator
     expected_role = "operator" if operation == "trade" and delegated else "owner"
     if operation == "transfer":
@@ -322,7 +329,7 @@ def make_action(
             parameters["amount"] = canonical_decimal(parameters["amount"], positive=True)
     created = int(time.time()) if now is None else now
     identity = secrets.token_hex(16) if intent_id is None else intent_id
-    if not INTENT_RE.fullmatch(identity):
+    if not isinstance(identity, str) or not INTENT_RE.fullmatch(identity):
         raise ClientError("intent ID must be 32 lowercase hex characters")
     return {
         "v": PROTOCOL,
@@ -339,7 +346,33 @@ def make_action(
     }
 
 
+def validate_action_for_encryption(action: Any) -> dict[str, Any]:
+    fields = {
+        "v", "intent_id", "created_at", "expires_at", "chain_id", "market",
+        "operation", "owner", "operator", "signer", "parameters",
+    }
+    if not isinstance(action, dict) or set(action) != fields:
+        raise ClientError("action has unknown or missing fields")
+    signer = action.get("signer")
+    if not isinstance(signer, dict) or set(signer) != {"role", "private_key"}:
+        raise ClientError("action signer has unknown or missing fields")
+    parameters = action.get("parameters")
+    if not isinstance(parameters, dict):
+        raise ClientError("action parameters must be an object")
+    if type(action.get("created_at")) is not int or type(action.get("expires_at")) is not int:
+        raise ClientError("action timestamps must be integers")
+    rebuilt = make_action(
+        action.get("operation"), action.get("owner"), action.get("operator"),
+        signer.get("role"), signer.get("private_key"), dict(parameters),
+        now=action["created_at"], intent_id=action.get("intent_id"),
+    )
+    if rebuilt != action:
+        raise ClientError("action is noncanonical or inconsistent with client policy")
+    return rebuilt
+
+
 def execution_url(action: dict[str, Any], config: dict[str, Any]) -> str:
+    action = validate_action_for_encryption(action)
     key_id = str(config.get("key_id", ""))
     if not KEY_ID_RE.fullmatch(key_id):
         raise ClientError("relay key ID is invalid or missing")
@@ -365,10 +398,17 @@ def fetch_text(url: str) -> tuple[bool, str]:
 
 
 def print_link(action: dict[str, Any], config: dict[str, Any], summary: str) -> None:
+    url = execution_url(action, config)
+    signer_role = action["signer"]["role"]
+    signer_address = action["operator"] if signer_role == "operator" else action["owner"]
     print(f"ACTION={summary}")
     print(f"INTENT_ID={action['intent_id']}")
     print(f"EXPIRES_AT={action['expires_at']}")
-    print(f"EXECUTION_URL={execution_url(action, config)}")
+    print(f"SIGNER_ROLE={signer_role}")
+    print(f"SIGNER_ADDRESS={signer_address}")
+    print("SIGNER_KEY_VALIDATED=true")
+    print("ACTION_PACKAGE_VALIDATED=true")
+    print(f"EXECUTION_URL={url}")
     print("OPENING_THIS_LINK_EXECUTES=true")
 
 
@@ -446,7 +486,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "generate-wallet":
         address, key_path = generate_wallet(args.output_dir, role=args.role)
         role = args.role.upper()
-        print(f"{role}={address}\n{role}_KEY_FILE={key_path}")
+        retained_key = read_private_key(str(key_path))
+        if derive_address(retained_key) != address:
+            raise ClientError("generated wallet self-check failed")
+        print(
+            f"{role}={address}\n{role}_KEY_FILE={key_path}\n"
+            f"{role}_KEY_VALIDATED=true\n{role}_ADDRESS_MATCH_CONFIRMED=true"
+        )
         return 0
     config = load_config(args)
     if args.command == "result":
@@ -499,7 +545,8 @@ def main(argv: list[str] | None = None) -> int:
             config,
             target +
             "For a wholly fresh setup, about 99 owner SOMI is useful guidance, not a cutoff; "
-            "actual planned value and gas determine feasibility",
+            "actual planned value and gas determine feasibility. At click time, the owner "
+            "wallet must have enough SOMI for every missing setup value and worst-case gas",
         )
     elif args.command == "withdraw-link":
         assets = ["SOMI", "USDso"] if args.assets == "both" else [args.assets]
