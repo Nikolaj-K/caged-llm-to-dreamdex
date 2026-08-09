@@ -1,7 +1,7 @@
 # Caged LLM to DreamDEX
 
-This deliberately small public client lets an operating LLM create disposable
-owner/operator wallets, read their public DreamDEX state, and generate encrypted
+This deliberately small public client lets an operating LLM create a disposable
+owner wallet, optionally add a delegated-trading operator, read their public DreamDEX state, and generate encrypted
 links for exact actions on Somnia mainnet. The live relay is
 [`https://somnia.run`](https://somnia.run), and its execution page is
 [`https://somnia.run/tx`](https://somnia.run/tx).
@@ -36,24 +36,27 @@ For local tests, also install `requirements-dev.txt`.
 
 ## Quick start
 
-Generate a fresh disposable owner/operator pair immediately:
+Generate one fresh disposable owner wallet:
 
 ```sh
-python caged_llm_to_dreamdex.py generate-wallets
+python caged_llm_to_dreamdex.py generate-wallet
 ```
 
-The command prints two public addresses and two temporary key-file paths. It
-does not print either private key. Key files have mode `0600`; reveal one only
-when explicitly requested, and never paste a private key into ordinary chat or
-put it in a command argument or URL.
+The command prints one public address and one temporary key-file path. It does
+not print the private key. Key files have mode `0600`; reveal one only
+when explicitly requested, and never put a private key in a command argument or
+URL. A disposable key supplied to the operating LLM is considered compromised
+by that conversation and by the relay backend.
 
 For a wholly fresh setup, roughly 99 owner SOMI is a useful recommendation: the
-standard target is 95 SOMI in the DreamDEX vault, with room for an operator
-top-up and gas. It is not a hard owner-balance cutoff; actual planned value and
-worst-case gas determine feasibility. The standard generated-wallet flow uses
-`top_up_to_target`, bringing an unfunded operator to about 1 SOMI from the owner.
-Explicit `manual` mode remains available whenever the operator has a positive
-SOMI balance for gas; about 1 SOMI is recommended rather than required.
+standard target is 95 SOMI in the DreamDEX vault, with room for gas. It is not
+a hard owner-balance cutoff; actual planned value and worst-case gas determine
+feasibility. Direct-owner trading is the default and needs no operator.
+
+For delegated market trading only, generate one optional second wallet with
+`generate-wallet --role operator`. Setup can then bring that operator to about
+1 SOMI from the owner and grant its bounded place/cancel permissions. Funding
+the vault itself never requires a second key.
 
 One concise notice is enough: these are disposable mainnet demo wallets, so use
 only the small amount intended for the experiment.
@@ -62,44 +65,84 @@ After setup confirms, the normal guided demo proposes selling a calculated,
 lot-aligned SOMI amount expected to receive about 3 USDso. This is explicitly a
 SOMI **sell**; the `buy` command below does the opposite and spends USDso to buy
 SOMI. After the sell confirms, offer to return vault USDso, remaining vault
-SOMI, or both to the owner. Withdrawing one asset keeps trading permissions;
-the default both-assets cleanup revokes them.
+SOMI, or both to the owner. In optional delegated mode, withdrawing one asset
+keeps trading permissions; the default both-assets cleanup revokes them.
 
 ## Commands
 
-Use the full addresses and key-file paths printed by `generate-wallets`.
+Use the full address and key-file path printed by `generate-wallet`.
 
 Read fresh public status:
 
 ```sh
 python caged_llm_to_dreamdex.py status \
-  --owner-address 0xFULL_OWNER_ADDRESS \
-  --operator-address 0xFULL_OPERATOR_ADDRESS
+  --owner-address 0xFULL_OWNER_ADDRESS
 ```
 
-Create the standard initial setup link (`top_up_to_target` is the default):
+Create the standard one-key initial setup link:
 
 ```sh
 python caged_llm_to_dreamdex.py fund-link \
-  --owner-key-file /temporary/path/owner.key \
-  --operator-address 0xFULL_OPERATOR_ADDRESS
+  --owner-key-file /temporary/path/owner.key
 ```
 
-Sell SOMI or buy with USDso using the operator:
+Sell SOMI or buy with USDso directly as the owner:
 
 ```sh
+python caged_llm_to_dreamdex.py trade-link \
+  --owner-key-file /temporary/path/owner.key \
+  sell --somi 1 --max-slippage-bps 100
+
+python caged_llm_to_dreamdex.py trade-link \
+  --owner-key-file /temporary/path/owner.key \
+  buy --usdso 1 --max-slippage-bps 100
+```
+
+To opt into delegated trading, generate one `Operator`, then add its address to
+setup/status/withdraw commands and use its key for trades:
+
+```sh
+python caged_llm_to_dreamdex.py generate-wallet --role operator
+python caged_llm_to_dreamdex.py fund-link \
+  --owner-key-file /temporary/path/owner.key \
+  --operator-address 0xFULL_OPERATOR_ADDRESS
+
+python caged_llm_to_dreamdex.py status \
+  --owner-address 0xFULL_OWNER_ADDRESS \
+  --operator-address 0xFULL_OPERATOR_ADDRESS
+
 python caged_llm_to_dreamdex.py trade-link \
   --owner-address 0xFULL_OWNER_ADDRESS \
   --operator-key-file /temporary/path/operator.key \
   sell --somi 1 --max-slippage-bps 100
-
-python caged_llm_to_dreamdex.py trade-link \
-  --owner-address 0xFULL_OWNER_ADDRESS \
-  --operator-key-file /temporary/path/operator.key \
-  buy --usdso 1 --max-slippage-bps 100
 ```
 
-Withdraw only USDso or only SOMI while keeping trading permissions:
+After introducing an optional `Operator`, keep supplying its address for every
+later status read and action. Do not silently fall back to direct-owner mode,
+because that would omit the still-relevant permission rows. Keep delegated mode
+until a confirmed both-assets cleanup has revoked those permissions.
+
+In the default direct-owner mode, withdraw only USDso or only SOMI:
+
+```sh
+python caged_llm_to_dreamdex.py withdraw-link \
+  --owner-key-file /temporary/path/owner.key \
+  --assets USDso
+
+python caged_llm_to_dreamdex.py withdraw-link \
+  --owner-key-file /temporary/path/owner.key \
+  --assets SOMI
+```
+
+Withdraw both assets:
+
+```sh
+python caged_llm_to_dreamdex.py withdraw-link \
+  --owner-key-file /temporary/path/owner.key
+```
+
+With an active delegated `Operator`, retain its address on selective withdrawals
+and on the both-assets cleanup. The latter is what revokes its permissions:
 
 ```sh
 python caged_llm_to_dreamdex.py withdraw-link \
@@ -107,15 +150,6 @@ python caged_llm_to_dreamdex.py withdraw-link \
   --operator-address 0xFULL_OPERATOR_ADDRESS \
   --assets USDso
 
-python caged_llm_to_dreamdex.py withdraw-link \
-  --owner-key-file /temporary/path/owner.key \
-  --operator-address 0xFULL_OPERATOR_ADDRESS \
-  --assets SOMI
-```
-
-Withdraw both assets and revoke operator permissions:
-
-```sh
 python caged_llm_to_dreamdex.py withdraw-link \
   --owner-key-file /temporary/path/owner.key \
   --operator-address 0xFULL_OPERATOR_ADDRESS
@@ -126,13 +160,22 @@ Transfer an exact owner amount or all available operator SOMI:
 ```sh
 python caged_llm_to_dreamdex.py transfer-link \
   --owner-key-file /temporary/path/owner.key \
-  --operator-address 0xFULL_OPERATOR_ADDRESS \
   --from owner --asset USDso --to 0xFULL_RECIPIENT_ADDRESS --amount 1
 
 python caged_llm_to_dreamdex.py transfer-link \
   --owner-address 0xFULL_OWNER_ADDRESS \
   --operator-key-file /temporary/path/operator.key \
   --from operator --asset SOMI --to 0xFULL_RECIPIENT_ADDRESS --all
+```
+
+While delegated mode is active, an owner transfer likewise retains the public
+operator identity:
+
+```sh
+python caged_llm_to_dreamdex.py transfer-link \
+  --owner-key-file /temporary/path/owner.key \
+  --operator-address 0xFULL_OPERATOR_ADDRESS \
+  --from owner --asset USDso --to 0xFULL_RECIPIENT_ADDRESS --all
 ```
 
 Read the durable result after clicking a link:
@@ -143,7 +186,7 @@ python caged_llm_to_dreamdex.py result 0123456789abcdef0123456789abcdef
 
 `status` and `result` use public GET requests. If a status GET is unavailable,
 the client prints the exact relay URL plus direct official Somnia explorer URLs
-for both wallets. Open those URLs directly; never use web search to find them or
+for the selected wallet set. Open those URLs directly; never use web search to find them or
 investigate proxy, workflow, environment, RPC, or mirror workarounds. The
 explorer fallback can establish wallet SOMI—and visible wallet tokens such as
 USDso—but not internal DreamDEX vault balances, permissions, orders, or book
@@ -152,7 +195,7 @@ is healthy. Never infer that a wallet is unfunded, and never contradict or
 repeat a funding request to a user who has already said it is funded. Link
 generation is offline and never sends the encrypted package to the relay.
 
-When the two resolved addresses are presented to the user, always put each
+When resolved addresses are presented to the user, always put each
 direct official Somnia explorer link immediately below its address. The links
 let the user inspect the wallets without turning that inspection into a required
 conversation step.
@@ -185,7 +228,8 @@ action package. The public key cannot decrypt that package.
 
 The private relay backend owns decryption, validation, status reads, DreamDEX contract
 integration, signing, durable results, and deployment operations. Each action
-contains exactly the selected owner or operator key, never both. The relay
+contains exactly one selected signer key. In direct mode that is the owner key;
+in delegated mode a trade contains the operator key, never both keys. The relay
 backend can decrypt it in process memory; it is not intentionally returned in
 HTML or API results or written to application storage. Treat generated wallets as
 disposable because the operating LLM/tool environment can read their temporary
@@ -199,23 +243,28 @@ operations `fund`, `trade`, `withdraw`, and `transfer`.
 Paste this prompt into a fresh window opened on the repository:
 
 > Read this repository and follow AGENTS.md. Install its dependencies and start
-> a fresh DreamDEX demo session. On their first mention, call them the `Owner`
-> (wallet holding funds to deploy to DEX vault) and the `Operator` (wallet
-> holding gas to pay for transactions). Before asking me to paste keys or
-> offering to generate them, write “The Somnia Librarian wants you to know:”
-> outside a blockquote, then quote the warning beginning with “Any private keys”
-> and explain that keys used here must be considered compromised on both the LLM
+> a fresh DreamDEX demo session. On its first mention, call it the `Owner`
+> (wallet holding funds to deploy to DEX vault). Before asking me to paste a key or
+> offering to generate one, write “The Somnia Librarian wants you to know:”
+> outside a blockquote, then quote the warning beginning with “Any private key”
+> and explain that any key used here must be considered compromised on both the LLM
 > side and the relay-service backend side. Next explain that the protocol can
-> transfer supported funds out of either wallet, fund the DreamDEX vault, and
+> transfer supported funds out of the wallet, fund the DreamDEX vault, and
 > perform operations on the **SOMI/USDso** market. Then ask whether I want to
-> provide existing disposable keys or have you generate up to two missing
-> wallets. Keep the roles I provide and guide me to
-> a state with two distinct keys and a sensibly funded `Owner`. Clearly show me
+> provide one disposable `Owner` key or have you generate one. Immediately add
+> that market trading can optionally use a second `Operator` (wallet holding gas
+> to pay for transactions), although vault funding does not require it and the
+> default flow trades directly as `Owner`. Do not use “zero, one, or two”
+> wording. Keep the role I provide and guide me to a sensibly funded `Owner`.
+> Clearly show me
 > which address to fund when fresh status says funding is needed; if a status
 > read fails, treat the balance as unknown rather than unfunded and preserve my
 > report that it is funded internally without announcing the failed read. Show
 > a direct official Somnia explorer link immediately below each resolved wallet
-> address. Arrange `Operator` gas automatically when needed, and
+> address. If I choose delegated trading, arrange `Operator` gas automatically
+> when needed, and retain that `Operator` address for every later status read and
+> action until a confirmed delegated both-assets cleanup revokes its permissions;
+> never silently fall back to direct-owner mode while those permissions may remain live. Then
 > use ordinary operational language rather than implementation details or
 > internal parameter names. Follow safety constraints silently instead of
 > telling me what you are not doing. Present one exact action link at a time and
@@ -227,8 +276,8 @@ Paste this prompt into a fresh window opened on the repository:
 > Do not make a failed agent-side status GET a universal blocker: for a fully
 > specified action, let the execution page perform fresh preflight. Require a
 > pasted status/result only when live state is needed to define or verify the
-> next action. If relay status is unavailable, directly inspect the two official
-> Somnia explorer address pages for wallet SOMI without narrating the retrieval
+> next action. If relay status is unavailable, directly inspect the available official
+> Somnia explorer address page or pages for wallet SOMI without narrating the retrieval
 > mechanics. After setup, point me to the `Owner DreamDEX vault: SOMI` and
 > `Owner DreamDEX vault: USDso` rows on the execution page, but only ask me to
 > copy a row when its value is actually needed.

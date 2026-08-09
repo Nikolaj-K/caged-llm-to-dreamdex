@@ -16,8 +16,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture
 def wallets(tmp_path: Path) -> dict[str, object]:
-    owner, operator, owner_path, operator_path = client.generate_wallets(
-        str(tmp_path / "wallets")
+    owner, owner_path = client.generate_wallet(str(tmp_path / "owner"))
+    operator, operator_path = client.generate_wallet(
+        str(tmp_path / "operator"), role="operator",
     )
     return {
         "owner": owner,
@@ -51,32 +52,31 @@ def invoke(capsys, relay_key: PrivateKey, arguments: list[str]) -> tuple[str, st
     return captured.out, captured.err
 
 
-def test_generate_wallets_creates_distinct_private_files_without_printing_keys(
+@pytest.mark.parametrize("role", ["owner", "operator"])
+def test_generate_wallet_creates_one_private_file_without_printing_key(
     tmp_path: Path,
     capsys,
+    role: str,
 ) -> None:
-    directory = tmp_path / "generated-wallets"
-    assert client.main(["generate-wallets", "--output-dir", str(directory)]) == 0
+    directory = tmp_path / f"generated-{role}"
+    assert client.main([
+        "generate-wallet", "--role", role, "--output-dir", str(directory),
+    ]) == 0
     captured = capsys.readouterr()
     values = dict(line.split("=", 1) for line in captured.out.splitlines())
-    owner_path = Path(values["OWNER_KEY_FILE"])
-    operator_path = Path(values["OPERATOR_KEY_FILE"])
-    owner_key = owner_path.read_text(encoding="ascii").strip()
-    operator_key = operator_path.read_text(encoding="ascii").strip()
+    label = role.upper()
+    key_path = Path(values[f"{label}_KEY_FILE"])
+    private_key = key_path.read_text(encoding="ascii").strip()
 
-    assert values["OWNER"] != values["OPERATOR"]
-    assert client.derive_address(owner_key) == values["OWNER"]
-    assert client.derive_address(operator_key) == values["OPERATOR"]
-    assert owner_key != operator_key
+    assert set(values) == {label, f"{label}_KEY_FILE"}
+    assert client.derive_address(private_key) == values[label]
     assert stat.S_IMODE(directory.stat().st_mode) == 0o700
-    assert stat.S_IMODE(owner_path.stat().st_mode) == 0o600
-    assert stat.S_IMODE(operator_path.stat().st_mode) == 0o600
-    assert owner_key not in captured.out + captured.err
-    assert operator_key not in captured.out + captured.err
+    assert stat.S_IMODE(key_path.stat().st_mode) == 0o600
+    assert private_key not in captured.out + captured.err
     assert captured.err == ""
 
 
-def test_generate_wallets_refuses_to_overwrite_existing_directory(
+def test_generate_wallet_refuses_to_overwrite_existing_directory(
     tmp_path: Path,
     capsys,
 ) -> None:
@@ -86,7 +86,7 @@ def test_generate_wallets_refuses_to_overwrite_existing_directory(
     sentinel.write_text("leave-this-file-alone\n", encoding="ascii")
 
     with pytest.raises(client.ClientError, match="already exists"):
-        client.main(["generate-wallets", "--output-dir", str(directory)])
+        client.main(["generate-wallet", "--output-dir", str(directory)])
 
     assert sentinel.read_text(encoding="ascii") == "leave-this-file-alone\n"
     captured = capsys.readouterr()
@@ -94,17 +94,13 @@ def test_generate_wallets_refuses_to_overwrite_existing_directory(
 
 
 def test_default_wallet_directory_is_temporary_and_cleanable() -> None:
-    owner, operator, owner_path, operator_path = client.generate_wallets()
+    owner, owner_path = client.generate_wallet()
     directory = owner_path.parent
     try:
-        assert owner != operator
-        assert operator_path.parent == directory
         assert not directory.is_relative_to(Path(client.__file__).resolve().parent)
         assert client.derive_address(owner_path.read_text().strip()) == owner
-        assert client.derive_address(operator_path.read_text().strip()) == operator
     finally:
         owner_path.unlink(missing_ok=True)
-        operator_path.unlink(missing_ok=True)
         directory.rmdir()
 
 
@@ -201,8 +197,11 @@ def test_noncanonical_decimals_are_rejected(value: str) -> None:
     [
         "fund-manual",
         "fund-top-up-default",
+        "direct-fund",
         "sell",
         "buy",
+        "direct-sell",
+        "direct-buy",
         "withdraw-both",
         "withdraw-somi",
         "withdraw-usdso",
@@ -212,6 +211,7 @@ def test_noncanonical_decimals_are_rejected(value: str) -> None:
         "owner-usdso-max",
         "operator-somi-exact",
         "operator-somi-max",
+        "direct-owner-usdso-max",
     ],
 )
 def test_every_link_form_encrypts_exactly_one_correct_signer_key(
@@ -225,6 +225,9 @@ def test_every_link_form_encrypts_exactly_one_correct_signer_key(
     owner_path = str(wallets["owner_path"])
     operator_path = str(wallets["operator_path"])
     recipient = Account.create().address
+
+    direct = case.startswith("direct-")
+    normalized_case = case.removeprefix("direct-")
 
     if case == "fund-manual":
         command = [
@@ -240,17 +243,22 @@ def test_every_link_form_encrypts_exactly_one_correct_signer_key(
         ]
         operation, signer_role = "fund", "owner"
         expected_parameters = {"operator_gas_policy": "top_up_to_target"}
-    elif case in {"sell", "buy"}:
-        amount_flag = "--somi" if case == "sell" else "--usdso"
-        asset = "SOMI" if case == "sell" else "USDso"
+    elif case == "direct-fund":
+        command = ["fund-link", "--owner-key-file", owner_path]
+        operation, signer_role = "fund", "owner"
+        expected_parameters = {"operator_gas_policy": "top_up_to_target"}
+    elif normalized_case in {"sell", "buy"}:
+        amount_flag = "--somi" if normalized_case == "sell" else "--usdso"
+        asset = "SOMI" if normalized_case == "sell" else "USDso"
+        identity = (["--owner-key-file", owner_path] if direct else
+                    ["--owner-address", owner, "--operator-key-file", operator_path])
         command = [
-            "trade-link", "--owner-address", owner,
-            "--operator-key-file", operator_path, case,
+            "trade-link", *identity, normalized_case,
             amount_flag, "1.25", "--max-slippage-bps", "100",
         ]
-        operation, signer_role = "trade", "operator"
+        operation, signer_role = "trade", "owner" if direct else "operator"
         expected_parameters = {
-            "side": case,
+            "side": normalized_case,
             "input_asset": asset,
             "input_amount": "1.25",
             "max_slippage_bps": "100",
@@ -265,6 +273,16 @@ def test_every_link_form_encrypts_exactly_one_correct_signer_key(
         operation, signer_role = "withdraw", "owner"
         expected_parameters = {
             "assets": ["SOMI", "USDso"] if asset == "both" else [asset_arg],
+        }
+    elif case == "direct-owner-usdso-max":
+        signer_role = "owner"
+        command = [
+            "transfer-link", "--owner-key-file", owner_path, "--from", "owner",
+            "--asset", "USDso", "--to", recipient, "--all",
+        ]
+        operation = "transfer"
+        expected_parameters = {
+            "asset": "USDso", "recipient": recipient, "amount_mode": "max",
         }
     else:
         signer_role = "operator" if case.startswith("operator-") else "owner"
@@ -312,7 +330,8 @@ def test_every_link_form_encrypts_exactly_one_correct_signer_key(
     assert action["chain_id"] == client.CHAIN_ID == 5031
     assert action["market"] == client.MARKET == "SOMI:USDso"
     assert action["operation"] == operation
-    assert action["owner"] == owner and action["operator"] == operator
+    assert action["owner"] == owner
+    assert action["operator"] == (owner if direct else operator)
     assert action["signer"]["role"] == signer_role
     assert action["parameters"] == expected_parameters
     assert action["expires_at"] - action["created_at"] == client.LIFETIMES[operation]
@@ -352,14 +371,14 @@ def test_status_and_result_fallback_urls_are_read_only_and_offline(
     ]
     assert "STATUS_URL=" in stdout and stderr == ""
     assert "direct open/fetch/read tool" in stdout
-    assert "official explorer URLs for wallet-level SOMI" in stdout
+    assert "official explorer URL(s) for wallet-level SOMI" in stdout
     assert f"OWNER_EXPLORER_URL=https://explorer.somnia.network/address/{owner}" in stdout
     assert f"OPERATOR_EXPLORER_URL=https://explorer.somnia.network/address/{operator}" in stdout
     assert "BALANCE_STATUS=UNKNOWN" in stdout
-    assert "Do not infer or say that either wallet is unfunded" in stdout
+    assert "Do not infer or say that a displayed wallet is unfunded" in stdout
     assert "Preserve any user report that it is funded" in stdout
     assert "do not ask about funding again" in stdout
-    assert "silently inspect the two printed" in stdout
+    assert "silently inspect the printed" in stdout
     assert "Always show each explorer link" in stdout
     assert "Do not announce failed reads" in stdout
 
@@ -371,6 +390,18 @@ def test_status_and_result_fallback_urls_are_read_only_and_offline(
     )
     assert requested[-1] in stdout and stderr == ""
     assert all("/tx" not in url for url in requested)
+
+
+def test_status_defaults_to_direct_owner_mode_without_operator_output(
+    wallets: dict[str, object], relay_key: PrivateKey, monkeypatch, capsys,
+) -> None:
+    monkeypatch.setattr(client, "fetch_text", lambda _url: (True, "trading_mode=direct_owner\n"))
+    owner = str(wallets["owner"])
+    stdout, stderr = invoke(capsys, relay_key, ["status", "--owner-address", owner])
+    assert f"/v1/status/{owner}/{owner}.txt" in stdout
+    assert f"OWNER_EXPLORER_URL={client.EXPLORER_BASE_URL}/address/{owner}" in stdout
+    assert "OPERATOR=" not in stdout and "OPERATOR_EXPLORER_URL=" not in stdout
+    assert "trading_mode=direct_owner" in stdout and stderr == ""
 
 
 def test_agent_instructions_pin_somnia_identity_and_fallback_voice() -> None:

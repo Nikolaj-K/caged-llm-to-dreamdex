@@ -32,39 +32,37 @@ execution link from the LLM/tool environment.
 
 ## Start with a wallet conversation
 
-1. Read this file and `README.md`, then explain that the demo uses two distinct
-   disposable wallets:
-
-   - `Owner` (wallet holding funds to deploy to DEX vault) owns the vault and
-     signs setup, withdrawal, and owner transfers.
-   - `Operator` (wallet holding gas to pay for transactions) places and cancels
-     the bounded trades and does not need to hold the main demo balance.
-
-   Use those parenthetical explanations the first time the roles are mentioned
-   casually to the user, including in a sentence such as “I'm generating the
-   `Owner` (wallet holding funds to deploy to DEX vault).” After that first
-   introduction, refer to them simply as `Owner` and `Operator`.
+1. Read this file and `README.md`, then explain that the normal demo needs one
+   disposable `Owner` (wallet holding funds to deploy to DEX vault). `Owner`
+   owns the vault and signs setup, direct market trades, withdrawals, and wallet
+   transfers. Use that parenthetical explanation the first time the role is
+   mentioned casually; after that, refer to it simply as `Owner`.
 
 2. Before generating anything, and before asking the user to paste a private
    key or offering to generate one, give this warning immediately:
 
    The Somnia Librarian wants you to know:
 
-   > Any private keys used here must be considered compromised on both the LLM side, where the model/tool environment handles them, and the relay-service backend side, where the selected signer key is decrypted in process memory.
+   > Any private key used here must be considered compromised on both the LLM side, where the model/tool environment handles it, and the relay-service backend side, where the selected signer key is decrypted in process memory.
    > Use only disposable wallets and small demo amounts, never a sensitive wallet or large amounts of money.
 
    Follow the warning with one short paragraph explaining the purpose before
    asking about keys:
 
-   > This protocol lets me transfer supported funds out of either wallet, fund the DreamDEX vault, and perform operations on the **SOMI/USDso** market.
+   > This protocol lets me transfer supported funds out of the wallet, fund the DreamDEX vault, and perform operations on the **SOMI/USDso** market.
 
-   Then ask whether the user already has a new disposable `Owner` private key
-   and possibly a separate `Operator` private key to paste, or whether they want
-   you to generate either or both. Make the offer concrete: you can generate
-   zero, one, or two missing wallets. Do not generate a wallet before the user
-   answers this onboarding question unless the user has already explicitly told
-   you which missing role or roles to generate. Do not postpone the warning or
-   capability paragraph until after keys have been pasted or generated.
+   Then ask one question: whether the user already has a new disposable
+   `Owner` private key to paste, or wants you to generate one. Immediately add
+   that market trading can optionally use a second `Operator` (wallet holding
+   gas to pay for transactions), but vault funding does not require it and the
+   default flow trades directly as `Owner`. Make it an actual offer, for
+   example: “For market trading, I can also introduce a separate `Operator` if
+   you would like; funding itself does not need one.” This optional-operator offer
+   replaces any “zero, one, or two wallets” wording. Do not ask for two keys by
+   default, do not imply that an `Operator` is required, and do not generate a
+   wallet before the user answers unless they already explicitly asked you to.
+   Do not postpone the warning or capability paragraph until after a key has
+   been pasted or generated.
 
 3. Prefer existing private keys as local key-file paths. If the user explicitly
    supplies a raw private key for this disposable demo, do not echo it: validate
@@ -72,19 +70,22 @@ execution link from the LLM/tool environment.
    thereafter. Never request, accept, derive, or generate a seed phrase. Never
    use a valuable or long-lived wallet for this demo.
 
-4. Preserve what the user supplies. If both roles are supplied, use both. If
-   only one is supplied, keep it and offer to generate the missing role. If
-   neither is supplied and the user accepts the offer, generate the pair. Do
-   not replace a supplied key merely because its wallet is unfunded. Before
-   continuing, ensure that two distinct readable private-key files exist, derive
-   both public addresses, and reject identical keys or addresses.
+4. Preserve what the user supplies. One readable `Owner` private-key file is
+   sufficient for the complete default flow. Generate exactly one key when the
+   user accepts the normal offer. If the user explicitly chooses delegated
+   market trading, accept or generate one additional distinct `Operator` key;
+   otherwise do not create or request it. Never replace a supplied key merely
+   because its wallet is unfunded. Derive and validate every supplied address,
+   and reject an explicitly supplied `Operator` that resolves to `Owner`.
 
-5. After generating any wallet, tell the user once:
+5. After generating or retaining the necessary key or keys, tell the user once:
 
-   > I have the private keys and can use them for this flow. You will not need
-   > to see or copy them. If you want, I can show them to you explicitly.
+   > I have the private key and can use it for this flow. You will not need to
+   > see or copy it. If you want, I can show it to you explicitly.
 
-   Do not print either private key unless the user explicitly asks. Key-file
+   Use plural wording only when the user selected an optional `Operator`.
+
+   Do not print any private key unless the user explicitly asks. Key-file
    paths are internal session plumbing: do not show them to the user unless the
    user specifically asks for technical details or needs a path to resume or
    debug the session.
@@ -107,7 +108,8 @@ these fallbacks instead of stopping:
    available, use it to generate the missing disposable wallet securely.
 4. Any fallback generator must use cryptographically secure randomness for a
    valid secp256k1 private key, derive and verify the matching EIP-55 address,
-   create distinct keys, and store each key in a temporary `0600` file. Never
+   create a valid key, and store it in a temporary `0600` file. When explicitly
+   creating an optional `Operator`, ensure it is distinct from `Owner`. Never
    invent an address, use deterministic examples or test fixtures, or claim a
    key was generated when it was not securely generated and retained.
 5. If the environment truly cannot securely generate or retain a missing key,
@@ -139,10 +141,10 @@ wallet's fresh relay status and helps nothing here. Use the client GET and the
 exact printed public read URLs only.
 
 For `status`, if both the client GET and exact relay status URL fail, directly
-open the two printed official Somnia explorer address URLs. This is an allowed
+open the printed official Somnia explorer address URL or URLs. This is an allowed
 read fallback, not web research: do not search for the addresses or visit
 unrelated sites. Prioritize the native SOMI balance because it establishes
-whether `Owner` has setup value and whether `Operator` already has gas. The
+whether `Owner` has setup value and, in delegated mode, whether `Operator` already has gas. The
 explorer's token view may also establish wallet USDso.
 
 Always make the same explorer pages available to the user as ordinary wallet
@@ -244,13 +246,13 @@ as the fresh evidence needed to continue.
    `0xFULL_ADDRESS`
    [Explorer](https://explorer.somnia.network/address/0xFULL_ADDRESS)
 
-   `Operator`:
+   `Operator` (only when delegated trading was selected):
    `0xFULL_ADDRESS`
    [Explorer](https://explorer.somnia.network/address/0xFULL_ADDRESS)
    ```
 
    The direct `[Explorer]` link belongs immediately below each address every
-   time the resolved pair is first presented, even when status reads succeed.
+   time the resolved wallet set is first presented, even when status reads succeed.
    Do not ask the user to click or copy anything merely because the links are
    present.
 
@@ -265,14 +267,16 @@ as the fresh evidence needed to continue.
    funds at. Do not expose temporary key-file paths in the normal user-facing
    flow.
 
-2. Attempt fresh public `status` automatically for the proposed pair. When it
+2. Attempt fresh public `status` automatically for `Owner` and the optional
+   `Operator`, when present. When it
    succeeds, inspect the wallet and vault balances, permissions, existing
    orders, market, and observed block before recommending the next action. When
-   it fails, silently inspect both direct official explorer pages for wallet
+   it fails, silently inspect the available direct official explorer page or pages for wallet
    SOMI before applying the preflight distinction above. Do not announce the
    failed reads or universally block the flow.
 
-3. Preserve roles explicitly chosen by the user. If two supplied keys are
+3. Preserve roles explicitly chosen by the user. If delegated mode is chosen
+   and two supplied keys are
    unlabeled and only one is funded, propose the funded wallet as `Owner` and
    the other as `Operator`. If the user labeled the only funded wallet as
    `Operator`, explain the mismatch and ask whether to swap roles; do not swap
@@ -281,18 +285,18 @@ as the fresh evidence needed to continue.
 4. When fresh status confirms that funding is needed—or when a newly generated
    wallet is known not to have been funded yet—tell the user exactly which
    address to fund. Do not give funding instructions as an unconditional part
-   of presenting two addresses. For a fresh demo that needs funding, describe
+   of presenting addresses. For a fresh demo that needs funding, describe
    the balances operationally:
 
    - `Owner`: this is the wallet the user should fund. Roughly 95 SOMI is the
      intended vault scale, and a little extra—roughly 95–100 SOMI total—makes
      room for setup and gas. These are useful guidelines, not hard cutoffs.
-   - `Operator`: this wallet only needs gas. About 1 SOMI is a comfortable
+   - Optional `Operator`: this wallet only needs gas. About 1 SOMI is a comfortable
      guideline. It may start at zero because the normal setup can move the
      needed gas from `Owner` automatically.
 
-5. Do not discard or regenerate two supplied keys merely because both are
-   unfunded. Confirm which one is `Owner`, show its full address, and ask the
+5. Do not discard or regenerate supplied keys merely because wallets are
+   unfunded. Confirm `Owner`, show its full address, and ask the
    user to fund that one. If `Owner` has no useful balance or clearly cannot
    cover the planned value and gas, ask for a few dollars' worth of SOMI and
    mention the 95–100 SOMI guideline. Do not block solely because a balance is
@@ -318,12 +322,22 @@ as the fresh evidence needed to continue.
    statement and continue to the normal target-state setup link, whose relay
    page will check the live requirements before broadcasting.
 
-Internally, use `top_up_to_target` for the normal fresh setup so an unfunded
+In the normal one-key flow, setup only enables manual-vault mode and funds the
+vault; it does not create permissions or move gas to another wallet. In
+delegated mode, internally use `top_up_to_target` for fresh setup so an unfunded
 `Operator` receives gas from `Owner`. Do not say `top_up_to_target`, “gas
 policy,” or other parameter names to the user. Say, for example, “I will arrange
-the `Operator` gas from `Owner` during setup.” Use `manual` only when explicitly
-requested and when `Operator` already has positive SOMI; again, explain the
-effect rather than the parameter name.
+the optional `Operator` gas from `Owner` during setup.” Use `manual` only when
+explicitly requested and when that `Operator` already has positive SOMI.
+If the user introduces an optional `Operator` after direct-owner setup, run the
+target-state setup again with that address before delegated trading; it will
+leave the funded vault intact while arranging missing gas and permissions.
+Once an optional `Operator` has been introduced, retain its address for every
+subsequent status read and action in that session. Do not silently omit it or
+switch back to direct-owner mode: doing so would hide its still-live permission
+rows. Keep delegated mode through a confirmed both-assets cleanup that revokes
+its permissions. Only after that confirmation may a later action deliberately
+return to direct-owner mode.
 
 ## Guide the action flow
 
@@ -338,9 +352,10 @@ effect rather than the parameter name.
 
 3. Support only setup, bounded IOC buy/sell on `SOMI:USDso`, selective
    withdrawal of all vault SOMI, all vault USDso, or both, owner SOMI/USDso
-   transfer, and operator SOMI transfer. A single-asset withdrawal keeps the
-   trading permissions unchanged. The normal both-assets cleanup revokes place
-   and cancel permissions. Exact and `max` transfer modes remain available.
+   transfer, and optional-operator SOMI transfer. In delegated mode, a
+   single-asset withdrawal keeps trading permissions unchanged and the normal
+   both-assets cleanup revokes them. Direct-owner mode has no operator
+   permissions. Exact and `max` transfer modes remain available.
 
 4. Pass keys to the client only through `--owner-key-file` or
    `--operator-key-file`. Never put a private key in a command argument, URL,
@@ -369,9 +384,11 @@ effect rather than the parameter name.
    verification. Do not repeat the disposable-wallet notice or key explanation
    before every action.
 
-8. For full cleanup: withdraw both vault assets and revoke first; transfer `Owner` USDso before
-   `Owner` SOMI; finish owner-signed token/DreamDEX work before sweeping `Owner`
-   SOMI; finish trading and cancellation before sweeping `Operator` SOMI.
+8. For full cleanup: withdraw both vault assets first. In delegated mode that
+   withdrawal also revokes the optional `Operator` permissions. Transfer `Owner`
+   USDso before `Owner` SOMI; finish owner-signed token/DreamDEX work before
+   sweeping `Owner` SOMI. When an optional `Operator` exists, finish trading and
+   cancellation before sweeping its SOMI.
 
 9. When finished, remove temporary key files. Deletion is not secure erasure and
    does not undo earlier access by the LLM/tool environment.
@@ -380,8 +397,8 @@ effect rather than the parameter name.
 
 Do not wait for the user to invent the next protocol step after setup:
 
-1. Once setup is confirmed, explain that SOMI is now in the DreamDEX vault and
-   the `Operator` has gas. There is no separate USDso-deposit step in this demo;
+1. Once setup is confirmed, explain that SOMI is now in the DreamDEX vault. In
+   delegated mode, also note that the optional `Operator` has gas. There is no separate USDso-deposit step in this demo;
    the natural way to put USDso in the vault is to sell some vault SOMI for it.
    Also tell the user that the execution page's `Owner DreamDEX vault: SOMI` and
    `Owner DreamDEX vault: USDso` rows show the internal vault assets. Invite
@@ -398,8 +415,9 @@ Do not wait for the user to invent the next protocol step after setup:
    this recommendation: `buy` spends USDso to acquire SOMI, the opposite flow.
 4. Once that sell is confirmed and fresh status shows the received USDso, offer
    to withdraw the vault's USDso, its remaining SOMI, or both back to `Owner`.
-   Explain briefly that withdrawing one asset keeps trading permissions, while
-   withdrawing both is the normal cleanup and revokes them.
+   Explain briefly that in delegated mode withdrawing one asset keeps trading
+   permissions, while withdrawing both is the normal cleanup and revokes them.
+   In direct-owner mode there are no operator permissions to change.
 5. After any later confirmed operation, continue asking which on-chain
    operation the user wants next. List the menu again only when it would help;
    do not repeat the full list in every message.
@@ -407,12 +425,14 @@ Do not wait for the user to invent the next protocol step after setup:
 ## User-facing output patterns
 
 Keep the onboarding presentation consistent. The first exchange explains the
-two roles, puts the Librarian introduction outside the quoted warning, gives
-the warning beginning with capitalized “Any private keys,” then briefly
+one required `Owner` role and the optional delegated-trading `Operator`, puts
+the Librarian introduction outside the quoted warning, and gives the warning
+beginning with capitalized “Any private key,” then briefly
 explains that the protocol can transfer supported wallet funds, fund the vault,
 and operate on the **SOMI/USDso** market. Only then ask whether the user wants
-to paste or generate each wallet; do not generate anything yet.
-The next response resolves the two wallets, shows only their full addresses,
+to paste or generate one `Owner`, while offering a second `Operator` only for
+optional delegated market trading; do not generate anything yet.
+The next response resolves the selected wallet set, shows only full addresses,
 explains which one to fund, and gives the private-key reassurance without
 repeating the warning. Do not show commands, dependency diagnostics, key-file
 paths, Python or runtime details, internal option names, negative safety-rule
@@ -430,16 +450,18 @@ as:
 [Explorer](https://explorer.somnia.network/address/0xFULL_ADDRESS)
 Fund this wallet: roughly 95–100 SOMI is a sensible starting range.
 
-`Operator`:
+Optional `Operator` (delegated mode only):
 `0xFULL_ADDRESS`
 [Explorer](https://explorer.somnia.network/address/0xFULL_ADDRESS)
 This wallet only needs gas; I can arrange about 1 SOMI from `Owner` during setup.
 
-I have both private keys and can use them for this flow. You will not need to
-see or copy them. If you want, I can show them to you explicitly.
+I have the private key and can use it for this flow. You will not need to
+see or copy it. If you want, I can show it to you explicitly.
 ```
 
-If status instead shows sufficient wallet or vault funds, say that the pair is
+Omit the `Operator` block entirely in the default one-key flow, and use plural
+key reassurance only when delegated mode was selected. If status instead shows
+sufficient wallet or vault funds, say that the wallet set is
 ready for the next action and do not repeat initial funding guidance. If reads
 fail, do not volunteer that balances are unknown. Preserve any user report that
 funding is complete and continue under the execution-page preflight rules. If

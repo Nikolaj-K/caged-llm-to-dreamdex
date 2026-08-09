@@ -122,7 +122,11 @@ def _inside(path: Path, root: Path) -> bool:
         return False
 
 
-def generate_wallets(output_dir: str | None = None) -> tuple[str, str, Path, Path]:
+def generate_wallet(
+    output_dir: str | None = None, *, role: str = "owner",
+) -> tuple[str, Path]:
+    if role not in {"owner", "operator"}:
+        raise ClientError("wallet role must be owner or operator")
     client_root = Path(__file__).resolve().parent
     workspace = client_root.parent
     forbidden = [client_root]
@@ -140,31 +144,25 @@ def generate_wallets(output_dir: str | None = None) -> tuple[str, str, Path, Pat
             raise ClientError(f"session wallet directory already exists: {directory}")
         directory.mkdir(mode=0o700, parents=True)
     else:
-        directory = Path(tempfile.mkdtemp(prefix="caged-dreamdex-wallets-")).resolve()
+        directory = Path(tempfile.mkdtemp(prefix="caged-dreamdex-wallet-")).resolve()
     if any(_inside(directory, root.resolve()) for root in forbidden):
         directory.rmdir()
         raise ClientError("session wallet directory cannot be inside a repository or project archive")
     directory.chmod(0o700)
-    owner_key = generate_private_key()
-    operator_key = generate_private_key()
-    if derive_address(owner_key) == derive_address(operator_key):
-        directory.rmdir()
-        raise ClientError("generated owner and operator wallets unexpectedly collided")
-    paths = (directory / "owner.key", directory / "operator.key")
+    private_key = generate_private_key()
+    path = directory / f"{role}.key"
     try:
-        for path, key in zip(paths, (owner_key, operator_key), strict=True):
-            descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            try:
-                os.write(descriptor, (key + "\n").encode("ascii"))
-            finally:
-                os.close(descriptor)
-            path.chmod(0o600)
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            os.write(descriptor, (private_key + "\n").encode("ascii"))
+        finally:
+            os.close(descriptor)
+        path.chmod(0o600)
     except Exception:
-        for path in paths:
-            path.unlink(missing_ok=True)
+        path.unlink(missing_ok=True)
         directory.rmdir()
         raise
-    return derive_address(owner_key), derive_address(operator_key), *paths
+    return derive_address(private_key), path
 
 
 def checked_address(value: str) -> str:
@@ -176,8 +174,6 @@ def checked_address(value: str) -> str:
 def checked_pair(owner: str, operator: str) -> tuple[str, str]:
     normalized_owner = checked_address(owner)
     normalized_operator = checked_address(operator)
-    if normalized_owner == normalized_operator:
-        raise ClientError("owner and operator must be distinct addresses")
     return normalized_owner, normalized_operator
 
 
@@ -231,6 +227,16 @@ def role_address(address: str | None, key_file: str | None, role: str) -> tuple[
     return checked_address(address or ""), None
 
 
+def optional_role_address(
+    address: str | None, key_file: str | None, role: str,
+) -> tuple[str | None, str | None]:
+    if address and key_file:
+        raise ClientError(f"provide at most one {role} address or {role} key file")
+    if not address and not key_file:
+        return None, None
+    return role_address(address, key_file, role)
+
+
 def load_config(args: argparse.Namespace) -> dict[str, Any]:
     explicit = args.relay_config or os.environ.get("CAGED_LLM_RELAY_CONFIG")
     path = Path(explicit) if explicit else Path(__file__).with_name("relay.json")
@@ -274,9 +280,12 @@ def make_action(
     if operation not in LIFETIMES:
         raise ClientError("unsupported operation")
     owner, operator = checked_pair(owner, operator)
-    expected_role = "operator" if operation == "trade" else "owner"
+    delegated = owner != operator
+    expected_role = "operator" if operation == "trade" and delegated else "owner"
     if operation == "transfer":
         expected_role = signer_role
+        if not delegated and signer_role == "operator":
+            raise ClientError("operator transfers require a distinct optional operator wallet")
     if expected_role not in {"owner", "operator"} or signer_role != expected_role:
         raise ClientError("wrong signer role for operation")
     if derive_address(signer_key) != (operator if signer_role == "operator" else owner):
@@ -370,6 +379,15 @@ def add_identity(parser: argparse.ArgumentParser, role: str, *, require_key: boo
     group.add_argument(f"--{role}-key-file")
 
 
+def add_optional_identity(
+    parser: argparse.ArgumentParser, role: str, *, require_key: bool = False,
+) -> None:
+    group = parser.add_mutually_exclusive_group()
+    if not require_key:
+        group.add_argument(f"--{role}-address")
+    group.add_argument(f"--{role}-key-file")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--relay-config")
@@ -381,14 +399,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="allow only http://127.0.0.1:PORT or http://localhost:PORT for local development",
     )
     commands = parser.add_subparsers(dest="command", required=True)
-    wallets = commands.add_parser("generate-wallets")
-    wallets.add_argument("--output-dir")
+    wallet = commands.add_parser("generate-wallet")
+    wallet.add_argument("--role", choices=("owner", "operator"), default="owner")
+    wallet.add_argument("--output-dir")
     status = commands.add_parser("status")
     add_identity(status, "owner")
-    add_identity(status, "operator")
+    add_optional_identity(status, "operator")
     fund = commands.add_parser("fund-link")
     add_identity(fund, "owner", require_key=True)
-    add_identity(fund, "operator")
+    add_optional_identity(fund, "operator")
     fund.add_argument(
         "--operator-gas-policy",
         choices=("manual", "top_up_to_target"),
@@ -396,7 +415,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     trade = commands.add_parser("trade-link")
     add_identity(trade, "owner")
-    add_identity(trade, "operator", require_key=True)
+    add_optional_identity(trade, "operator", require_key=True)
     sides = trade.add_subparsers(dest="side", required=True)
     sell = sides.add_parser("sell")
     sell.add_argument("--somi", required=True)
@@ -406,11 +425,11 @@ def build_parser() -> argparse.ArgumentParser:
     buy.add_argument("--max-slippage-bps", required=True)
     withdraw = commands.add_parser("withdraw-link")
     add_identity(withdraw, "owner", require_key=True)
-    add_identity(withdraw, "operator")
+    add_optional_identity(withdraw, "operator")
     withdraw.add_argument("--assets", choices=("SOMI", "USDso", "both"), default="both")
     transfer = commands.add_parser("transfer-link")
     add_identity(transfer, "owner")
-    add_identity(transfer, "operator")
+    add_optional_identity(transfer, "operator")
     transfer.add_argument("--from", dest="from_role", choices=("owner", "operator"), required=True)
     transfer.add_argument("--asset", choices=("SOMI", "USDso"), required=True)
     transfer.add_argument("--to", required=True)
@@ -424,9 +443,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.command == "generate-wallets":
-        owner, operator, owner_path, operator_path = generate_wallets(args.output_dir)
-        print(f"OWNER={owner}\nOPERATOR={operator}\nOWNER_KEY_FILE={owner_path}\nOPERATOR_KEY_FILE={operator_path}")
+    if args.command == "generate-wallet":
+        address, key_path = generate_wallet(args.output_dir, role=args.role)
+        role = args.role.upper()
+        print(f"{role}={address}\n{role}_KEY_FILE={key_path}")
         return 0
     config = load_config(args)
     if args.command == "result":
@@ -437,35 +457,47 @@ def main(argv: list[str] | None = None) -> int:
         print(body if ok else f"{body}; open this exact public URL once with a direct open/fetch/read tool; do not search for it:\n{url}")
         return 0
     owner, owner_key = role_address(getattr(args, "owner_address", None), args.owner_key_file, "owner")
-    operator, operator_key = role_address(getattr(args, "operator_address", None), args.operator_key_file, "operator")
+    supplied_operator, operator_key = optional_role_address(
+        getattr(args, "operator_address", None), getattr(args, "operator_key_file", None),
+        "operator",
+    )
+    operator = supplied_operator or owner
     owner, operator = checked_pair(owner, operator)
+    if supplied_operator is not None and owner == operator:
+        raise ClientError("an explicitly supplied optional operator must be distinct from owner")
+    delegated = owner != operator
     if args.command == "status":
         url = f"{config['base_url']}/v1/status/{owner}/{operator}.txt"
-        print(
-            f"OWNER={owner}\nOPERATOR={operator}\nSTATUS_URL={url}\n"
-            f"OWNER_EXPLORER_URL={EXPLORER_BASE_URL}/address/{owner}\n"
-            f"OPERATOR_EXPLORER_URL={EXPLORER_BASE_URL}/address/{operator}"
-        )
+        lines = [f"OWNER={owner}", f"STATUS_URL={url}",
+                 f"OWNER_EXPLORER_URL={EXPLORER_BASE_URL}/address/{owner}"]
+        if delegated:
+            lines.extend((f"OPERATOR={operator}",
+                          f"OPERATOR_EXPLORER_URL={EXPLORER_BASE_URL}/address/{operator}"))
+        print("\n".join(lines))
         ok, body = fetch_text(url)
         print(
             body if ok else
             f"{body}\nBALANCE_STATUS=UNKNOWN\n"
-            "Do not infer or say that either wallet is unfunded. Preserve any user report "
+            "Do not infer or say that a displayed wallet is unfunded. Preserve any user report "
             "that it is funded and do not ask about funding again. Open STATUS_URL once with "
-            "a direct open/fetch/read tool; if that fails, silently inspect the two printed "
-            "official explorer URLs for wallet-level SOMI. Always show each explorer link "
-            "immediately below its wallet address in the user-facing pair. Do not announce "
+            "a direct open/fetch/read tool; if that fails, silently inspect the printed "
+            "official explorer URL(s) for wallet-level SOMI. Always show each explorer link "
+            "immediately below its corresponding wallet address. Do not announce "
             "failed reads during the normal flow and do not web-search for any URL"
         )
         return 0
     if args.command == "fund-link":
         parameters = {"operator_gas_policy": args.operator_gas_policy}
         action = make_action("fund", owner, operator, "owner", owner_key or "", parameters)
-        top_up = "top up operator to 1 SOMI if needed" if args.operator_gas_policy == "top_up_to_target" else "require manual operator gas funding"
+        if delegated:
+            top_up = "top up the optional operator to 1 SOMI if needed" if args.operator_gas_policy == "top_up_to_target" else "require manual operator gas funding"
+            target = f"Reach the 95 SOMI vault and operator-permission targets; {top_up}. "
+        else:
+            target = "Reach the 95 SOMI owner-vault target for direct-owner trading. "
         print_link(
             action,
             config,
-            f"Reach the 95 SOMI vault and operator-permission targets; {top_up}. "
+            target +
             "For a wholly fresh setup, about 99 owner SOMI is useful guidance, not a cutoff; "
             "actual planned value and gas determine feasibility",
         )
@@ -475,13 +507,18 @@ def main(argv: list[str] | None = None) -> int:
         parameters = {"assets": assets}
         action = make_action("withdraw", owner, operator, "owner", owner_key or "", parameters)
         asset_text = " and ".join(assets)
-        permission_text = "revoke" if revoke else "keep"
+        permission_text = (
+            f" and {'revoke' if revoke else 'keep'} optional-operator permissions"
+            if delegated else ""
+        )
         print_link(
             action, config,
-            f"Withdraw all vault {asset_text} to the owner wallet and {permission_text} "
-            f"operator permissions for {MARKET}",
+            f"Withdraw all vault {asset_text} to the owner wallet{permission_text} "
+            f"for {MARKET}",
         )
     elif args.command == "transfer-link":
+        if args.from_role == "operator" and not delegated:
+            raise ClientError("--from operator requires a distinct optional operator wallet")
         signer_key = owner_key if args.from_role == "owner" else operator_key
         if signer_key is None:
             raise ClientError(f"the {args.from_role} signer must be provided with a key file")
@@ -498,7 +535,12 @@ def main(argv: list[str] | None = None) -> int:
     else:
         asset, amount = ("SOMI", args.somi) if args.side == "sell" else ("USDso", args.usdso)
         parameters = {"side": args.side, "input_asset": asset, "input_amount": amount, "max_slippage_bps": args.max_slippage_bps}
-        action = make_action("trade", owner, operator, "operator", operator_key or "", parameters)
+        signer_role = "operator" if delegated else "owner"
+        signer_key = operator_key if delegated else owner_key
+        if signer_key is None:
+            required = "operator" if delegated else "owner"
+            raise ClientError(f"direct or delegated trading requires the selected {required} key file")
+        action = make_action("trade", owner, operator, signer_role, signer_key, parameters)
         verb = "Sell" if args.side == "sell" else "Spend at most"
         print_link(action, config, f"{verb} {amount} {asset} using a market-style IOC trade on {MARKET}; max slippage {args.max_slippage_bps} bps")
     return 0
