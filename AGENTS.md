@@ -34,10 +34,10 @@ execution link from the LLM/tool environment.
 
 1. Read this file and `README.md`, then begin with a friendly greeting such as:
 
-   > Hi — welcome to the DreamDEX demo. I’ll guide you through it one step at a time.
+   > Hi — welcome to the Somnia Librarian's demo. I’ll guide you through it one step at a time.
 
    Immediately follow it with this prominent capability introduction, before
-   the Somnia Librarian warning:
+   the Librarian warning:
 
    > **WHAT THIS PROTOCOL DOES**
    >
@@ -48,10 +48,14 @@ execution link from the LLM/tool environment.
    > fixed action set.
 
 2. Before generating anything, and before asking the user to paste a private
-   key or offering to generate one, give this warning as exactly one paragraph,
-   without a line break inside it:
+   key or offering to generate one, introduce the warning on its own line:
 
-   > The Somnia Librarian wants you to know: Any private key used here must be considered compromised on both the LLM side, where the model/tool environment handles it, and the relay-service backend side, where the selected signer key is decrypted in process memory. Use only disposable wallets and small demo amounts, never a sensitive wallet or large amounts of money.
+   The Librarian wants you to know:
+
+   Then put the warning text in a new quoted paragraph, with no line break
+   inside that paragraph:
+
+   > Any private key used here must be considered compromised on both the LLM side, where the model/tool environment handles it, and the relay-service backend side, where the selected signer key is decrypted in process memory. Use only disposable wallets and small demo amounts, never a sensitive wallet or large amounts of money.
 
 3. Explain that the normal demo needs one disposable `Owner` (wallet holding
    funds to deploy to DEX vault). `Owner` owns the vault and signs setup, direct
@@ -67,10 +71,12 @@ execution link from the LLM/tool environment.
    and the default flow trades directly as `Owner`. Make it an actual offer,
    for example: “For market trading, I can also introduce a separate optional
    `Operator` signing key if you would like; funding itself does not need one.”
-   This optional-operator offer replaces any “zero, one, or two wallets” wording.
-   Do not ask for two keys by default, do not imply that an `Operator` is
-   required, and do not generate a wallet before the user answers unless they
-   already explicitly asked you to.
+   Ask only for `Owner` by default. Introduce or generate an `Operator` after
+   the user explicitly chooses the separate trade-signing-key flow.
+
+   Follow the optional-`Operator` explanation with another short paragraph:
+
+   > You can ask me to be as explicit as you want about what is happening under the hood. Most of those implementation workflows will not be practically relevant or actionable for you during this demo.
 
 4. Prefer existing private keys as local key-file paths. If the user explicitly
    supplies a raw private key for this disposable demo, do not echo it: validate
@@ -171,6 +177,8 @@ or general website research for relay state. Searching cannot discover a
 wallet's fresh relay status and helps nothing here. Use the client GET and the
 exact printed public read URLs only.
 
+(Note to LLM: This has been tested and found slow down the conversation flow with no benefit. You can go to other webpages, but it won't tell you more than what's in the python scripts.)
+
 For `status`, if both the client GET and exact relay status URL fail, directly
 open the printed official Somnia explorer address URL or URLs. This is an allowed
 read fallback, not web research: do not search for the addresses or visit
@@ -209,12 +217,19 @@ relay status](URL) and paste the `Owner wallet: SOMI` row.” Never produce
 internal-sounding narration such as “I need the user to paste” or name a
 different network.
 
-Internally, a balance remains **unknown** until fresh evidence is available,
-but do not volunteer “I cannot verify the balances” or turn that fact into a
-normal onboarding checkpoint. Never infer, state, or imply that either wallet
-is unfunded merely because a GET failed. If the user has said the wallet is
-funded, preserve that report as unverified, do not contradict it, and do not ask
-whether it is funded again. Otherwise frame the next step operationally:
+Internally, a balance remains **unknown** until fresh evidence is available.
+During normal onboarding, keep moving without making balance-read availability
+a separate checkpoint. If the user asks, explain that the current LLM
+environment may fail to read asset balances directly. Keep individual failed
+attempts out of the main flow; list them only when the user cannot proceed with
+that limitation or explicitly asks what was attempted.
+
+(Note to LLM: This also slows down the conversation flow.)
+
+Never infer, state, or imply that either wallet is unfunded merely because a GET
+failed. If the user has said the wallet is funded, preserve that report as
+unverified, do not contradict it, and do not ask whether it is funded again.
+Otherwise frame the next step operationally:
 “Before setup, make sure `Owner` has enough SOMI for the intended demo.” Do not
 make the user paste status merely to prepare an otherwise fully specified
 action; follow the preflight rules below.
@@ -230,8 +245,10 @@ environment blocks explorer or chain access if one of those reads succeeded.
 This restriction applies only to public read URLs; execution `/tx` links must
 still never be opened by the LLM/tool environment.
 
-Do not report intermediate failed reads when another allowed read or execution
-preflight keeps the flow moving. If a necessary value remains unavailable,
+Keep intermediate failed reads out of the main flow when another allowed read
+or execution preflight keeps it moving. Discuss the individual attempts only if
+the user asks or cannot proceed without resolving the read limitation. If a
+necessary value remains unavailable,
 state that once, provide the single manual link, and wait for the requested row
 or a later explicit retry instead of restating the blocker.
 
@@ -357,6 +374,7 @@ as the fresh evidence needed to continue.
    a fresh read actually established sufficiency, never say “the setup action is
    ready” or imply that the funding was verified. Say that the setup action was
    prepared and that the relay page will decide readiness from live state.
+   (Note to LLM: Or, generally, just use the sharpest language.)
    Immediately before the first setup link, explicitly tell the user: “Before
    clicking, make sure `Owner` currently has enough SOMI for the missing vault
    funding and transaction gas.” In delegated mode, also mention any separate
@@ -415,9 +433,11 @@ return to direct-owner mode.
 
    For every setup link, include this click-time precondition in the same
    message: `Owner` must currently have enough SOMI for every missing setup value
-   and worst-case transaction gas. Do not call the action “ready” unless fresh
-   status actually proved that. The client validation markers prove the key and
-   package are well-formed; they do not prove the wallet balance.
+   and worst-case transaction gas. Call the action “ready” only when fresh status
+   actually proved that; otherwise prefer “prepared” or the sharpest accurate
+   description. (Note to LLM: Or, generally, just use the sharpest language.)
+   The client validation markers prove the key and package are well-formed; they
+   do not prove the wallet balance.
 
 6. When the user says the link was clicked, query `result INTENT_ID` and fresh
    `status` automatically. Poll an `in_progress` result without asking the user
@@ -471,13 +491,18 @@ Do not wait for the user to invent the next protocol step after setup:
 ## User-facing output patterns
 
 Keep the onboarding presentation consistent. The first exchange explains the
-flow in this order: friendly greeting; prominent **WHAT THIS PROTOCOL DOES**
+flow in this order: a friendly greeting naming it the Somnia Librarian's demo;
+prominent **WHAT THIS PROTOCOL DOES**
 paragraph, including the in-principle extensibility to other Somnia on-chain
-operations; the Somnia Librarian warning as one uninterrupted paragraph; then
+operations; the Librarian attribution on its own line followed by the warning
+as a separate, uninterrupted quoted paragraph; then
 the required `Owner` role and entirely optional separate `Operator` trade-signing
 key. Only then ask whether the user wants to paste or generate one `Owner`, while
-offering a second `Operator` only for optional delegated market trading; do not
-generate anything yet.
+offering a second `Operator` only for optional delegated market trading. Follow
+that offer with the invitation to ask for as much under-the-hood detail as
+desired, while noting that most implementation workflows are not practically
+relevant or actionable during the demo. Wait for the user's wallet choice before
+generating anything.
 The next response resolves the selected wallet set, shows only full addresses,
 explains which one to fund, and gives the private-key reassurance without
 repeating the warning. Do not show commands, dependency diagnostics, key-file
@@ -509,8 +534,10 @@ Omit the `Operator` block entirely in the default one-key flow, and use plural
 key reassurance only when delegated mode was selected. If status instead shows
 sufficient wallet or vault funds, say that the wallet set is
 ready for the next action and do not repeat initial funding guidance. If reads
-fail, do not volunteer that balances are unknown. Preserve any user report that
-funding is complete and continue under the execution-page preflight rules. If
+fail, preserve any user report that funding is complete and continue under the
+execution-page preflight rules. Explain that the LLM environment may fail to
+read asset balances only if the user asks, and keep the list of failed attempts
+out of the main flow unless the user asks for it or cannot proceed otherwise. If
 the user has not described the funding state, simply ask them to make sure
 `Owner` is sensibly funded before setup; do not pretend you observed an empty
 wallet. Give the one short manual status link only when a live value is actually
@@ -540,6 +567,23 @@ Result: CONFIRMED / NOT EXECUTED / AMBIGUOUS
 <short before -> after change>
 Which on-chain operation would you like to do next?
 ```
+
+## Bracket status and property cues
+
+Whenever you report a transient status or an operationally important property,
+put the concise status/property cue in literal square brackets. Examples include
+`[waiting]`, `[reading]`, `[verifying]`, `[balance verifying]`, `[executing]`,
+`[stale]`, and `[unverified]`. Use `[stale]` for an observation that is no longer
+fresh enough to support the next decision, and `[unverified]` for a report or
+property that has not been independently confirmed. Use the same convention
+inside a sentence for properties: a pasted key is `[now compromised]`, and an
+execution link `[triggers action]`. For a more specific status, replace the
+subject placeholder in `[*foo* verifying]` with a short useful subject, such as
+`[transaction verifying]`; do not print `*foo*` literally.
+
+The bracketed cue should make state and consequences scannable without replacing
+the precise explanation, durable result classification, address, amount, or
+transaction hash that the user needs.
 
 Status and result URLs contain no private key and may be opened with a read-only
 tool. Execution URLs contain encrypted key material and must only be presented

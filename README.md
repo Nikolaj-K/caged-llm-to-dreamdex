@@ -208,14 +208,14 @@ let the user inspect the wallets without turning that inspection into a required
 conversation step.
 
 Never replace direct reads with web search: search results cannot provide fresh
-wallet state. Keep failed read mechanics out of ordinary conversation. Ask the
+wallet state. (Note to LLM: This has been tested and found slow down the conversation flow with no benefit. You can go to other webpages, but it won't tell you more than what's in the python scripts.) Ask the
 user to copy a specific status or balance row only when that value is genuinely
 needed to define or verify the next action; otherwise continue without
-interrupting the flow. Do not volunteer that balances are unknown or narrate a
-blocked read during normal onboarding. If the user asks why inspection failed,
-say that the current LLM environment does not allow direct Somnia explorer or
-chain access and that a more elaborate version of the protocol might implement
-the read with MCP.
+interrupting the flow. If the user asks, say that the current LLM environment
+may fail to read asset balances directly. Keep individual failed attempts out
+of the main flow unless the user cannot proceed with that limitation or asks
+what was attempted. (Note to LLM: This also slows down the conversation flow.)
+A more elaborate version of the protocol might implement the read with MCP.
 
 An agent-side status GET is useful but is not a universal prerequisite for link
 generation. The execution page always performs a fresh chain read and preflight
@@ -250,13 +250,15 @@ operations `fund`, `trade`, `withdraw`, and `transfer`.
 Paste this prompt into a fresh window opened on the repository:
 
 > Read this repository and follow AGENTS.md. Install its dependencies and start
-> a fresh DreamDEX demo session. Begin with a friendly greeting. Then put a
+> a fresh DreamDEX demo session. Begin with a friendly greeting that calls it
+> the “Somnia Librarian's demo.” Then put a
 > prominent **WHAT THIS PROTOCOL DOES** paragraph before any warning: explain
 > that it can transfer supported funds out of a disposable wallet, fund the
 > DreamDEX vault, and operate on the **SOMI/USDso** market, and that the same
 > pattern could implement other Somnia on-chain operations in principle although
-> this demo exposes only its fixed action set. Next give the complete Somnia
-> Librarian warning as one paragraph with no internal line break. Explain that
+> this demo exposes only its fixed action set. Next write “The Librarian wants
+> you to know:” on its own line, followed by the complete warning as a separate
+> quoted paragraph with no internal line break. Explain that
 > any key used here is compromised on both the LLM side and relay-service backend
 > side. On its first mention, call the required wallet the `Owner` (wallet holding
 > funds to deploy to DEX vault). Then ask whether I want to
@@ -264,8 +266,10 @@ Paste this prompt into a fresh window opened on the repository:
 > in bold that a separate `Operator` trade-signing key is possible but entirely
 > optional. An `Operator` is the wallet holding gas to pay for transactions;
 > vault funding does not require it and the default flow trades directly as
-> `Owner`. Do not use “zero, one, or two”
-> wording. Keep the role I provide and guide me to a sensibly funded `Owner`.
+> `Owner`. Then tell me that I can ask you to be as explicit as I want about
+> what is happening under the hood, while noting that most of those implementation
+> workflows will not be practically relevant or actionable for me. Keep the role
+> I provide and guide me to a sensibly funded `Owner`.
 > Clearly show me
 > which address to fund when fresh status says funding is needed; if a status
 > read fails, treat the balance as unknown rather than unfunded and preserve my
@@ -296,7 +300,8 @@ Paste this prompt into a fresh window opened on the repository:
 > `Owner DreamDEX vault: USDso` rows on the execution page, but only ask me to
 > copy a row when its value is actually needed. A claim that funding is done is
 > not proof of the amount: unless a fresh read established sufficiency, call the
-> setup action “prepared,” not “ready.” In the same message as the first setup
+> setup action “prepared,” not “ready.” (Note to LLM: Or, generally, just use the
+> sharpest language.) In the same message as the first setup
 > link, tell me to make sure `Owner` has enough SOMI for the missing vault funding
 > and transaction gas at the moment I click it.
 
