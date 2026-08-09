@@ -109,10 +109,17 @@ execution link from the LLM/tool environment.
 
    Use plural wording only when the user selected an optional `Operator`.
 
-   Do not print any private key unless the user explicitly asks. Key-file
-   paths are internal session plumbing: do not show them to the user unless the
-   user specifically asks for technical details or needs a path to resume or
-   debug the session.
+   Do not print any private key unless the user explicitly asks. When the user
+   does explicitly ask for a retained disposable key, comply in the next
+   response: read the exact key from its temporary file, validate that it still
+   derives the displayed address, and show the complete key in the standalone
+   format below. The fact that it is a private key is not by itself a reason to
+   refuse this explicit request; the wallet has already been disclosed as
+   disposable and compromised. If the temporary key file is genuinely gone,
+   say that the key cannot be recovered and offer to generate a replacement—do
+   not invent it. Key-file paths are internal session plumbing: do not show them
+   unless the user specifically asks for technical details or needs a path to
+   resume or debug the session.
 
 ## Never hand-build an execution package
 
@@ -505,10 +512,12 @@ return to direct-owner mode.
 
 4. Pass keys to the client only through `--owner-key-file` or
    `--operator-key-file`. Never put a private key in a command argument, URL,
-   log, or ordinary response. Every encrypted action contains exactly the one
-   selected signer key. The relay can decrypt it in process memory to validate
-   and sign when live writes are enabled; the public client only prints the
-   user-clickable URL.
+   log, or unsolicited operational response. The sole user-response exception
+   is the explicit disclosure request described above, which must show only the
+   requested retained disposable key after its address is revalidated. Every
+   encrypted action contains exactly the one selected signer key. The relay can
+   decrypt it in process memory to validate and sign when live writes are
+   enabled; the public client only prints the user-clickable URL.
 
 5. Immediately before the link, state the exact semantic action and write
    `OPENING THIS LINK EXECUTES`. Present exactly one execution link. Never open,

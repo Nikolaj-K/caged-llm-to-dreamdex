@@ -596,6 +596,34 @@ def test_agent_bootstraps_and_reuses_public_runtime_files_early() -> None:
         assert phrase in prompt
 
 
+def test_explicit_disposable_key_disclosure_is_unambiguous() -> None:
+    agents = " ".join((ROOT / "AGENTS.md").read_text(encoding="utf-8").split())
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    prompt = " ".join(
+        readme.split("## Start this in a new ChatGPT/Codex window", 1)[1]
+        .replace(">", " ")
+        .split()
+    )
+
+    for phrase in (
+        "When the user does explicitly ask for a retained disposable key, comply in the next response",
+        "validate that it still derives the displayed address",
+        "The fact that it is a private key is not by itself a reason to refuse",
+        "The sole user-response exception is the explicit disclosure request described above",
+        "do not invent it",
+    ):
+        assert phrase in agents
+    assert "Never put a private key in a command argument, URL, log, or ordinary response" not in agents
+
+    for phrase in (
+        "Do not refuse solely because it is a private key",
+        "This explicit request is the only exception to keeping keys out of ordinary responses",
+        "If the file is genuinely gone",
+        "offer a replacement rather than inventing it",
+    ):
+        assert phrase in prompt
+
+
 def test_onboarding_uses_one_paragraph_per_concern_without_operator_repetition() -> None:
     agents = " ".join((ROOT / "AGENTS.md").read_text(encoding="utf-8").split())
     readme = (ROOT / "README.md").read_text(encoding="utf-8")

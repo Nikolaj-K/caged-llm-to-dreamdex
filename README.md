@@ -60,6 +60,11 @@ not print the private key. Key files have mode `0600`; reveal one only
 when explicitly requested, and never put a private key in a command argument or
 URL. A disposable key supplied to the operating LLM is considered compromised
 by that conversation and by the relay backend.
+When the user explicitly requests a retained disposable key, the operating LLM
+should revalidate it against the displayed address and show the complete key; it
+should not refuse solely because the requested value is a private key. If the
+temporary file has disappeared, the key is unrecoverable and must never be
+invented.
 It also prints `OWNER_KEY_VALIDATED=true` and
 `OWNER_ADDRESS_MATCH_CONFIRMED=true`. Do not proceed if either self-check is
 missing. Every action command similarly prints signer/package validation
@@ -318,6 +323,13 @@ Paste this prompt into a fresh window opened on the repository:
 > sensibly funded `Owner`. Treat these as content and paragraph-structure
 > requirements rather than lines to copy literally; apart from the required
 > warning and status markers, use natural wording without restating a point.
+> If I explicitly ask to see a retained disposable private key, read it from its
+> temporary `0600` file, revalidate that it derives the displayed address, and
+> show the complete `0x...` key on its own line beneath its backticked role
+> label. Do not refuse solely because it is a private key. This explicit request
+> is the only exception to keeping keys out of ordinary responses; never put a
+> key in a command argument, URL, or log. If the file is genuinely gone, say it
+> is unrecoverable and offer a replacement rather than inventing it.
 > Near the start of the session, silently prepare the public runtime files that
 > later steps will need. Reuse an existing executable checkout when available;
 > otherwise obtain the exact checked-in `caged_llm_to_dreamdex.py` and
