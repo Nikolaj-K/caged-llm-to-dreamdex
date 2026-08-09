@@ -198,8 +198,7 @@ investigate proxy, workflow, environment, RPC, or mirror workarounds. The
 explorer fallback can establish wallet SOMI—and visible wallet tokens such as
 USDso—but not internal DreamDEX vault balances, permissions, orders, or book
 state. A hosted tool may reject a parameterized status URL even while the relay
-is healthy. Never infer that a wallet is unfunded, and never contradict or
-repeat a funding request to a user who has already said it is funded. Link
+is healthy. Never infer that a wallet is unfunded from a failed read. Link
 generation is offline and never sends the encrypted package to the relay.
 
 When resolved addresses are presented to the user, always put each
@@ -211,10 +210,11 @@ Never replace direct reads with web search: search results cannot provide fresh
 wallet state. (Note to LLM: This has been tested and found slow down the conversation flow with no benefit. You can go to other webpages, but it won't tell you more than what's in the python scripts.) Ask the
 user to copy a specific status or balance row only when that value is genuinely
 needed to define or verify the next action; otherwise continue without
-interrupting the flow. If the user asks, say that the current LLM environment
-may fail to read asset balances directly. Keep individual failed attempts out
-of the main flow unless the user cannot proceed with that limitation or asks
-what was attempted. (Note to LLM: This also slows down the conversation flow.)
+interrupting the flow. Some hosted web reads are not expected to work. When a
+failed read is useful to communicate, mark it `[failed reading]`, explain the
+practical consequence briefly, and avoid a long list of attempts unless the
+user asks for it or cannot proceed without the details. (Note to LLM: This also
+slows down the conversation flow.)
 A more elaborate version of the protocol might implement the read with MCP.
 
 An agent-side status GET is useful but is not a universal prerequisite for link

@@ -459,7 +459,8 @@ def test_agent_instructions_pin_somnia_identity_and_fallback_voice() -> None:
         "I need the user to paste",
         "Prioritize the native SOMI balance",
         "Explorer evidence is wallet-level only",
-        "Keep the retrieval mechanics out of ordinary conversation",
+            "Some hosted web reads are not expected to work",
+            "`[failed reading]`",
         "`Owner DreamDEX vault: SOMI`",
         "do not ask them to copy the values unless a value",
     ):
